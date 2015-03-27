@@ -8,6 +8,9 @@
 # import the logarithmic function
 from math import log, bin, hex, oct
 
+#----------------------------------------
+# CONSTANTS
+#------------
 # Default Output Trace File Names
 TRACE_FILE_NAME = 'trace.txt'
 BRANCH_FILE_NAME = 'branch.txt'
@@ -32,86 +35,156 @@ ADDR_PAGE_HIGH = PAGE_BITS - 1
 ADDR_OFFSET_LOW = PAGE_BITS
 ADDR_OFFSET_HIGH = PDP8_ADDR_SIZE - 1
 
-# Dictionaries for memory operations saved to trace file,
-# and for branch trace file operations.
+# Dictionaries for memory operations saved to trace files,
+# for branch trace file operations, and opcode information.
 trace_type = {
-    'READ': 0, 
-    'WRITE': 1, 
-    'FETCH': 2
+	'READ': 0, 
+	'WRITE': 1, 
+	'FETCH': 2
 }
 
 branch_type = {
-    'NO_BRANCH': 0, 
-    'UNCONDITIONAL': 1, 
-    'CONDITIONAL': 2
+	'NO_BRANCH': 0, 
+	'UNCONDITIONAL': 1, 
+	'CONDITIONAL': 2
 }
 
+# Opcode Names
+opcode_name = {
+    0: 'AND',
+    1: 'TAD',
+    2: 'ISZ',
+    3: 'DCA',
+    4: 'JMS',
+    5: 'JMP',
+    6: 'IO',
+    7: 'UI'
+}
+# Opcode function calls
 opcode_type = {
-    'AND': 0,
-    'TAD': 1,
-    'ISZ': 2,
-    'DCA': 3,
-    'JMS': 4,
-    'JMP': 5,
-    'IO': 6,
-    'UI': 7
+	0: op_and(),
+	1: op_tad(),
+	2: op_isz(),
+	3: op_dca(),
+	4: op_jms(),
+	5: op_jmp(),
+	6: op_io(),
+	7: op_ui
+}
+# Number of cycles required for each opcode type
+opcode_cycles = {
+	0: 2	# AND = 2 cycles
+	1: 2 	# TAD = 2 cycles 
+	2: 2 	# ISZ = 2 cycles
+	3: 2 	# DCA = 2 cycles 
+	4: 2 	# JMS = 2 cycles 
+	5: 1 	# JMP = 1 cycle
+	6: 0 	# IO = 0 cycles 
+	7: 1 	# UI = 1 cycle 
 }
 
-# Class for the statistic tracking variables
-# for instruction counts and total cycles used,
-# and total numbers of branches taken/not taken.
-class Statistics(object):
-    def __init__(self):
-	    self.instr_count = 0
-		self.instr_cycles = 0
-		self.and_count = 0
-		self.and_cycles = 0 
-		self.tad_count = 0
-		self.tad_cycles = 0
-		self.isz_count = 0
-		self.isz_cycles = 0
-		self.dca_count = 0
-		self.dca_cycles = 0
-		self.jms_count = 0
-		self.jms_cycles = 0
-		self.jmp_count = 0
-		self.jmp_cycles = 0		
-		self.io_count = 0
-		self.io_cycles = 0
-		self.ui_count = 0 
-		self.ui_cycles = 0
-		self.branch_total_uncond_t = 0 
-		self.branch_JMS_t = 0 
-		self.branch_JMP_t = 0 
-		self.branch_UI_uncond_t = 0 
-		self.branch_total_cond_t = 0 
-		self.branch_total_cond_nt = 0 
-		self.branch_ISZ_t = 0 
-		self.branch_ISZ_nt = 0 
-		self.branch_UI_cond_t = 0 
-		self.branch_UI_cond_nt = 0
+#--------------------------------------
+# DYNAMIC DATA STRUCTURES/VARIABLES
+#--------------------------
 
-# Create an instance of the statistics class
-stats = Statistics()		
+debug = 0 			# debug display flag
+debug_v = 0 		# verbose debug display flag
+mem = list()		# the main memory array
+memvalid = list()	# corresponding valid bits
+curr_opcode_str = 'NOP'	# the string of the current opcode 
+opcode = 0			# integer value of current opcode
+
+# Dictionary to track current values of registers
+# and machine state, including effective address, 
+# memory at effective address, and the address of 
+# the currently executed instruction (prevPC)
+reg = {
+	'IR': 0,	# Instruction (current/last executed)
+	'PC': 0,	# Program Counter
+	'AC': 0,	# Accumulator
+	'LR': 0,	# Link Register
+	'SR': 0,	# Switch Register
+	'eaddr': 0,		# effective address
+	'mem_eaddr': 0,	# value in memory @ eaddr
+	'prevPC': 0	# PC of the current(last executed) instruction
+}
+
+# Statistic tracking dictionaries for instruction 
+# counts, total cycles used, and total numbers 
+# of branches taken/not taken.
+instr_count = {
+	'all': 0,
+	'AND': 0,
+	'TAD': 0,
+	'ISZ': 0,
+	'DCA': 0,
+	'JMP': 0,
+	'JMS': 0,
+	'IO': 0,
+	'UI': 0
+}
+cycle_count = {
+	'all': 0,
+	'AND': 0,
+	'TAD': 0,
+	'ISZ': 0,
+	'DCA': 0,
+	'JMP': 0,
+	'JMS': 0,
+	'IO': 0,
+	'UI': 0
+}
+# counts for taken unconditional branches
+branch_uncond_count = {
+	'all': 0,
+	'JMP': 0,
+	'JMS': 0,
+	'UI': 0
+}
+# counts for taken conditional branches
+branch_cond_t_count = {
+	'all': 0,
+	'ISZ': 0,
+	'UI': 0
+}
+# counts for not taken conditional branches
+branch_cond_nt_count = {
+	'all': 0,
+	'ISZ': 0,
+	'UI': 0 
+}
+
+
+#===============================================
+# FUNCTIONS
+#------------
 
 # Function: open_tracefiles
 # Description: Opens trace files for appending.
 def open_tracefiles():
-    tracefile = open(TRACE_FILE_NAME,'a')
+	global tracefile
+	global branchfile
+	tracefile = open(TRACE_FILE_NAME,'a')
 	branchfile = open(BRANCH_FILE_NAME,'a')
 
 # Function: close_tracefiles
 # Description: Closes trace files
 def close_tracefiles():
+	global tracefile
+	global branchfile
     tracefile.close()
 	branchfile.close()
 
+#-----------------------------------
 # Function: load_memory
 # Description: Takes input filename as parameter, and 
 #   assigns values accordingly to the main memory array.
 def load_memory(filename):
-    mem = []
-    memvalid = []
+	global mem
+	global memvalid
+	global reg
+    mem = list()	# initialize mem and memvalid to empty lists
+    memvalid = list()
 	curr_addr = 0
 	# Set all valid bits to 0
     for i in range (MEM_SIZE - 1)
@@ -123,6 +196,7 @@ def load_memory(filename):
 	if line_char[0] == '@':
 	    START_ADDR = int('0x'+line_char[1:])
     
+	# read lines until end of file is encountered
 	while line != '':
 	    line_char = list(line)
 		# if current line specifies an address
@@ -143,26 +217,27 @@ def load_memory(filename):
 	srcfile.close()
 	
 	# set PC to the starting address
-	PC = START_ADDR
+	reg['PC'] = START_ADDR
 	# clear other registers
-	AC = 0
-	LR = 0
-	IR = 0
+	reg['AC'] = 0
+	reg['LR'] = 0
+	reg['IR'] = 0
 
-		
+#-------------------------------------
 # Function: read_mem
 # Arguments: address, read_type
 # Description: "Performs" a read operation on a location
 #    in memory, writes to the trace file, and returns the 
 #    value read from the given memory location.
 def read_mem(address, read_type):
+	#global mem
+	#global memvalid
 	# obtain address in hexadecimal for print
 	addr_hex = hex(address)
 	addr_hex = addr_hex[2:]	 # trim the leading '0x'
-    # check if the value at the given memory address is valid
-    if (memvalid[address] != 1)
-	    print "[Warning: Invalid memory location accessed at",addr_hex
-    
+	# check if the value at the given memory address is valid
+	if (memvalid[address] != 1)
+		print "[Warning: Invalid memory location accessed at",addr_hex
 	# write to trace file
 	tracefile.write(trace_type[read_type]+' '+addr_hex)
 	# return the value from memory at given address
@@ -174,6 +249,8 @@ def read_mem(address, read_type):
 #    in memory, writes to the trace file, and updates the 
 #    value at the given memory location.
 def write_mem(address, value):
+	global mem
+	global memvalid
     # obtain address in hexadecimal for print
 	addr_hex = hex(address)
 	addr_hex = addr_hex[2:]	 # trim the leading '0x'
