@@ -96,20 +96,18 @@ class PDP8(object):
 		self.memvalid = list()	# corresponding valid bits
 		self.curr_opcode_str = 'NOP'	# the string of the current opcode 
 		self.opcode = 0			# integer value of current opcode
-		# Dictionary to track current values of registers
+		# Current values of all registers
 		# and machine state, including effective address, 
 		# memory at effective address, and the address of 
 		# the currently executed instruction (prevPC)
-		self.reg = {
-			'IR': 0,	# Instruction (current/last executed)
-			'PC': 0,	# Program Counter
-			'AC': 0,	# Accumulator
-			'LR': 0,	# Link Register
-			'SR': 0,	# Switch Register
-			'eaddr': 0,		# effective address
-			'mem_eaddr': 0,	# value in memory @ eaddr
-			'prevPC': 0	# PC of the current(last executed) instruction
-		}
+		self.IR = 0		# Instruction (current/last executed)
+		self.PC = 0		# Program Counter
+		self.AC = 0		# Accumulator
+		self.LR = 0		# Link Register
+		self.SR = 0		# Switch Register
+		self.eaddr = 0		# effective address
+		self.mem_eaddr = 0	# value in memory @ eaddr
+		self.prevPC = 0		# PC of the current(last executed) instruction
 
 		# Statistic tracking dictionaries for instruction 
 		# counts, total cycles used, and total numbers 
@@ -180,11 +178,11 @@ class PDP8(object):
 			self.mem = list()	# initialize mem and memvalid to empty lists
 			self.memvalid = list()
 			# set PC to the starting address
-			self.reg['PC'] = START_ADDR
+			self.PC = START_ADDR
 			# clear other registers
-			self.reg['AC'] = 0
-			self.reg['LR'] = 0
-			self.reg['IR'] = 0
+			self.AC = 0
+			self.LR = 0
+			self.IR = 0
 			curr_addr = 0
 			# Set all valid bits to 0
 			for i in range (MEM_SIZE - 1)
@@ -194,7 +192,7 @@ class PDP8(object):
 			line = srcfile.readline()
 			# Set starting address to the first address given in the file
 			if line_char[0] == '@':
-				self.reg['PC'] = int('0x'+line_char[1:])
+				self.PC = int('0x'+line_char[1:])
 			
 			# read lines until end of file is encountered
 			while line != '':
@@ -269,10 +267,13 @@ class PDP8(object):
 		#                    and no HLT was encountered
 		#               1 -> HLT microinstruction was given.
 		def execute(self):
-			# STEP 1: Fetch the current instruction
-			self.reg['IR'] = self.read_mem(self.reg['PC'],'FETCH')
+			# STEP 1: Fetch the current instruction, increment PC
+			self.IR = self.read_mem(self.PC,'FETCH')
+			self.prevPC = self.PC 
+			self.PC = self.PC + 1
 
 			# STEP 2: Decode the current instruction
 			# determine the opcode
-			self.curr_opcode = self.reg['IR'] >> (PDP8_WORD_SIZE - PDP8_OPCODE_SIZE)
+			self.curr_opcode = self.IR >> (PDP8_WORD_SIZE - PDP8_OPCODE_SIZE)
+			
 			
