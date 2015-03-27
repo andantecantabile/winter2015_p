@@ -275,5 +275,20 @@ class PDP8(object):
 			# STEP 2: Decode the current instruction
 			# determine the opcode
 			self.curr_opcode = self.IR >> (PDP8_WORD_SIZE - PDP8_OPCODE_SIZE)
+			self.curr_opcode_str = opcode_name[self.curr_opcode]
+			op_str = self.curr_opcode_str 	# shorter name for easier use, read-only
 			
+			# STEP 2b: Determine the Effective Address
+			if (self.curr_opcode >= 0 and self.curr_opcode < 6):
+				self.eaddr = self.calc_eaddr()
+			
+			# STEP 3: Execute Current Instruction
+			opcode_type.get(self.curr_opcode, op_default())
+			# This will call the corresponding function based on the current opcode.
+			
+			# STEP 4: Update Stats for Opcodes
+			self.instr_count['all'] = self.instr_count['all'] + 1
+			self.instr_count[self.curr_opcode_str] = self.instr_count[self.curr_opcode_str]+1
+			self.cycle_count['all'] = self.cycle_count['all'] + opcode_cycles[self.curr_opcode_str]
+			self.cycle_count[self.curr_opcode_str] = self.cycle_count[self.curr_opcode_str]+opcode_cycles[self.curr_opcode_str]
 			
