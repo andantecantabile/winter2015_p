@@ -255,15 +255,11 @@ class PDP8_ISA(object):
 			# if current line specifies an address
 			if line_str[0] == '@':
 				curr_addr = int(curr_val)
-				if self.debug_v:
-					print (" --Address: {0:04o}".format(curr_addr))
 			# otherwise, if current line specifies a memory value
 			else: 
 				curr_data = int(curr_val)
 				self.memvalid[curr_addr] = 1
 				self.mem[curr_addr] = curr_data
-				if self.debug_v:
-					print (" --At address: {0:04o} Set Value: {1:04o}".format(curr_addr,curr_data))
 				# increment the current address
 				curr_addr = curr_addr + 1
 			
@@ -361,12 +357,6 @@ class PDP8_ISA(object):
 		
 		current_page = self.prevPC & page_mask 
 		current_offset = self.IR & offset_mask
-		
-		if self.debug_v:
-			print ("Page Mask: {0}".format(bin(page_mask)))
-			print ("Offset Mask: {0}".format(bin(offset_mask)))
-			print (" Page/Offset: {0}/{1}".format(bin(current_page),bin(current_offset)))
-			print (" IR_bin_str: {0}".format(IR_bin_str))
 			
 		eff_addr = -1	# initialize return val to -1
 				
@@ -422,8 +412,6 @@ class PDP8_ISA(object):
 				self.cycle_count['all'] = self.cycle_count['all'] + EADDR_CYCLES['AutoIndex']
 				self.cycle_count[self.opcode_str] = self.cycle_count[self.opcode_str]+EADDR_CYCLES['AutoIndex']
 		# Return the calculated effective address
-		if self.debug_v:
-			print ("Calc Effective Address: {0}".format(eff_addr))
 		return int(eff_addr)
 
 	#-------------------------------------	
@@ -893,7 +881,7 @@ class PDP8_ISA(object):
 		self.instr_count['all'] = self.instr_count['all'] + 1
 		self.instr_count[op_str] = self.instr_count[op_str]+1
 		
-		if self.debug:
+		if self.debug:	# Print basic debug for instruction number, PC, IR
 			print (" ")
 			print ("================== INSTRUCTION #{0:-1d} : {1} ==================".format(self.instr_count['all'], self.opcode_str))
 			print ("             PC / IR: {0:04o} / {1:04o}".format(self.prevPC, self.IR))
@@ -903,8 +891,6 @@ class PDP8_ISA(object):
 			self.eaddr = self.calc_eaddr()
 		else:
 			self.eaddr = 0
-		if self.debug_v:
-			print ("Step 2 Effective Address: {0:04o}".format(self.eaddr))
 		
 		# STEP 3: Execute Current Instruction
 		self.opcode_exec.get(self.opcode,self.op_default)()
@@ -914,11 +900,8 @@ class PDP8_ISA(object):
 		self.cycle_count['all'] = self.cycle_count['all'] + OPCODE_CYCLES[op_str]
 		self.cycle_count[op_str] = self.cycle_count[op_str]+OPCODE_CYCLES[op_str]
 		
-		# Print the basic debug values
+		# Print the basic debug values for register/memory values after instruction executes
 		if self.debug:
-			#print (" ")
-			#print ("================== INSTRUCTION #{0:-1d} : {1} ==================".format(self.instr_count['all'], self.opcode_str))
-			#print ("             PC / IR: {0:04o} / {1:04o}".format(self.prevPC, self.IR))
 			print ("             LR / AC: {0:1o} / {1:04o}".format(self.LR, self.AC))
 			print ("   EFFECTIVE ADDRESS: {0:04o}".format(self.eaddr))
 			print ("   VALUE @ EFF. ADDR: {0:04o}".format(self.mem[self.eaddr]))
