@@ -20,20 +20,20 @@ BRANCH_FILE_NAME = 'branch.txt'
 START_ADDR = 0o200  # 200 octal
 
 # Architecture Constants
-PDP8_ADDR_SIZE = 12  # in bits
-PDP8_WORD_SIZE = 12
-PDP8_WORDS_PER_PAGE = 128
-PDP8_PAGE_NUM = 32
-PDP8_OPCODE_SIZE = 3   # opcode size in bits
+PDP8_ADDR_SIZE = int(12)  # in bits
+PDP8_WORD_SIZE = int(12)
+PDP8_WORDS_PER_PAGE = int(128)
+PDP8_PAGE_NUM = int(32)
+PDP8_OPCODE_SIZE = int(3)   # opcode size in bits
 # Special Bit Positions for Memory Reference Addressing
-ADDR_INDIRECT_ADDR_BIT = 3
-ADDR_MEMORY_PAGE_BIT = 4
+ADDR_INDIRECT_ADDR_BIT = int(3)
+ADDR_MEMORY_PAGE_BIT = int(4)
 # Calculated Constants
 MEM_SIZE = PDP8_WORDS_PER_PAGE * PDP8_PAGE_NUM
-PAGE_BITS = log(PDP8_PAGE_NUM, 2)
+PAGE_BITS = int(log(PDP8_PAGE_NUM, 2))
 # Address Indices for page and offset
-ADDR_PAGE_LOW = 0
-ADDR_PAGE_HIGH = PAGE_BITS - 1
+ADDR_PAGE_LOW = int(0)
+ADDR_PAGE_HIGH = int(PAGE_BITS - 1)
 ADDR_PAGE_SIZE = (ADDR_PAGE_HIGH - ADDR_PAGE_LOW + 1)
 ADDR_OFFSET_LOW = PAGE_BITS
 ADDR_OFFSET_HIGH = PDP8_ADDR_SIZE - 1
@@ -289,14 +289,11 @@ class PDP8_ISA(object):
 	#    in memory, writes to the trace file, and returns the 
 	#    value read from the given memory location.
 	def read_mem(self, address, read_type):
-		# obtain address in hexadecimal for print
-		addr_hex = hex(address)
-		addr_hex = addr_hex[2:]	 # trim the leading '0x'
 		# check if the value at the given memory address is valid
 		if (self.memvalid[address] != 1):
-			print ("[Warning: Invalid memory location accessed at %04o \n", address)
+			print ("[Warning: Invalid memory location accessed at {0:04o}".format(address))
 		# write to trace file
-		self.tracefile.write(str(TRACE_TYPE[read_type])+' '+addr_hex+'\n')
+		self.tracefile.write("{0} {1:03x}\n".format(str(TRACE_TYPE[read_type]),address))
 		# return the value from memory at given address
 		return (self.mem[address] & self.word_mask)
 
@@ -307,11 +304,8 @@ class PDP8_ISA(object):
 	#    in memory, writes to the trace file, and updates the 
 	#    value at the given memory location.
 	def write_mem(self, address, value):
-		# obtain address in hexadecimal for print
-		addr_hex = hex(address)
-		addr_hex = addr_hex[2:]	 # trim the leading '0x'
 		# write to trace file
-		self.tracefile.write(TRACE_TYPE['WRITE']+' '+addr_hex+'\n')
+		self.tracefile.write("{0} {1:03x}\n".format(str(TRACE_TYPE['WRITE']),address))
 		# update value in the memory array & set valid bit
 		self.mem[address] = value
 		self.memvalid[address] = 1
@@ -329,7 +323,7 @@ class PDP8_ISA(object):
 			self.branch_uncond_count['all'] = self.branch_uncond_count['all'] + 1
 			self.branch_uncond_count[op_str] = self.branch_uncond_count[op_str] + 1
 			# write to trace file
-			self.branchfile.write("{0:04o          UNCONDITIONAL [{1:3s] TAKEN              {2:04o \n".format(curr_PC, op_str, target_addr))
+			self.branchfile.write("{0:04o}          UNCONDITIONAL [{1:3s}]  TAKEN              {2:04o} \n".format(curr_PC, op_str, target_addr))
 			# Example formatted print, uses a tuple: print '%d, %0d, %5d, %05d' % (34, 34, 34, 34)
 		# conditional branch type 
 		elif branch_type == BRANCH_TYPE['CONDITIONAL']:
@@ -340,7 +334,7 @@ class PDP8_ISA(object):
 			else: 
 				self.branch_cond_nt_count['all'] = self.branch_cond_nt_count['all'] + 1 
 				self.branch_cond_nt_count[op_str] = self.branch_cond_nt_count[op_str] + 1
-				self.branchfile.write("{0:04o          CONDITIONAL [{1:3s]    NOT TAKEN          {2:04o \n".format(curr_PC, op_str, target_addr))
+				self.branchfile.write("{0:04o}          CONDITIONAL [{1:3s}]    NOT TAKEN          {2:04o} \n".format(curr_PC, op_str, target_addr))
 	
 	#-------------------------------------
 	# Function: calc_eaddr
@@ -357,15 +351,25 @@ class PDP8_ISA(object):
 		# Convert IR to a binary string to check if specific
 		# flag bits are set.
 		IR_bin_str = bin(self.IR)
+		IR_bin_str = IR_bin_str[2:]	# trim off leading '0b'
 		
-		offset_mask = (1 << (ADDR_OFFSET_SIZE)) - 1 
-		page_mask = (1 << (ADDR_PAGE_SIZE)) - 1
+		while len(IR_bin_str) < PDP8_WORD_SIZE:
+			IR_bin_str = '0'+IR_bin_str
+		
+		offset_mask = (1 << ADDR_OFFSET_SIZE) - 1 
+		page_mask = ((1 << ADDR_PAGE_SIZE) - 1) << ADDR_OFFSET_SIZE
 		
 		current_page = self.prevPC & page_mask 
 		current_offset = self.IR & offset_mask
 		
+		if self.debug_v:
+			print ("Page Mask: {0}".format(bin(page_mask)))
+			print ("Offset Mask: {0}".format(bin(offset_mask)))
+			print (" Page/Offset: {0}/{1}".format(bin(current_page),bin(current_offset)))
+			print (" IR_bin_str: {0}".format(IR_bin_str))
+			
 		eff_addr = -1	# initialize return val to -1
-		
+				
 		# Check if the Indirect Addressing bit is not set
 		if IR_bin_str[ADDR_INDIRECT_ADDR_BIT] == '0':
 			# If Indirect Addressing bit = 0 (Direct addressing) 
@@ -418,14 +422,16 @@ class PDP8_ISA(object):
 				self.cycle_count['all'] = self.cycle_count['all'] + EADDR_CYCLES['AutoIndex']
 				self.cycle_count[self.opcode_str] = self.cycle_count[self.opcode_str]+EADDR_CYCLES['AutoIndex']
 		# Return the calculated effective address
-		return eff_addr
+		if self.debug_v:
+			print ("Calc Effective Address: {0}".format(eff_addr))
+		return int(eff_addr)
 
 	#-------------------------------------	
 	# Function: op_and
 	# Description: Executes the AND operation.
 	def op_and(self):
 		# First read the value at eaddr
-		self.mem_eaddr = read_mem(self.eaddr,'READ')
+		self.mem_eaddr = self.read_mem(self.eaddr,'READ')
 		self.mem_ref['mem_read'] = self.eaddr
 		# Calculate AC & mem_val
 		self.AC = self.AC & self.mem_eaddr
@@ -435,7 +441,7 @@ class PDP8_ISA(object):
 	# Description: Executes the TAD operation.
 	def op_tad(self):
 		# First read the value at eaddr
-		self.mem_eaddr = read_mem(self.eaddr,'READ')
+		self.mem_eaddr = self.read_mem(self.eaddr,'READ')
 		self.mem_ref['mem_read'] = self.eaddr
 		# Add AC and mem_val
 		sum = self.AC + self.mem_eaddr
@@ -452,22 +458,22 @@ class PDP8_ISA(object):
 	# Description: Executes the ISZ operation.
 	def op_isz(self):
 		# First read the value at eaddr
-		self.mem_eaddr = read_mem(self,self.eaddr,'READ')
+		self.mem_eaddr = self.read_mem(self.eaddr,'READ')
 		self.mem_ref['mem_read'] = self.eaddr
 		# Increment value by 1
 		self.mem_eaddr = (self.mem_eaddr + 1) & self.word_mask
 		# Write updated value to memory
-		self.write_mem(self,self.eaddr,self.mem_eaddr)
+		self.write_mem(self.eaddr,self.mem_eaddr)
 		self.mem_ref['mem_write'] = self.eaddr
 		# Check if the updated value is 0: if so, skip next instr
 		if self.mem_eaddr == 0:
 			self.PC = self.PC + 1
 			# Write to branch trace file, providing current PC, opcode string,
 			# target address, branch type, and flag indicating branch taken/not taken
-			self.write_branch_trace(self, self.prevPC, self.opcode_str, 
+			self.write_branch_trace(self.prevPC, self.opcode_str, 
 				self.PC, BRANCH_TYPE['CONDITIONAL'], True)
 		else:
-			self.write_branch_trace(self, self.prevPC, self.opcode_str, 
+			self.write_branch_trace(self.prevPC, self.opcode_str, 
 				self.PC, BRANCH_TYPE['CONDITIONAL'], False)
 	
 	#-------------------------------------	
@@ -520,6 +526,11 @@ class PDP8_ISA(object):
 	def op_ui(self):
 		# Convert IR to a binary string to test for setting of specific bit positions
 		IR_str = bin(self.IR)
+		IR_str = IR_str[2:]	# trim off leading '0b'
+		
+		while len(IR_str) < PDP8_WORD_SIZE:
+			IR_str = '0'+IR_str
+		
 		# Initialize this instr as NOT a branch
 		curr_branch_type = BRANCH_TYPE['NO_BRANCH']
 		curr_branch_taken = False
@@ -529,56 +540,56 @@ class PDP8_ISA(object):
 		
 		# Verbose Debug Print for UI Instructions
 		if self.debug_v:
-			print ("\n")
-			print ("***************** UI MODULE DEBUG ******************\n")
-			print ("   Current Instr: %04o\n", self.IR)
-			print (" \n")
-			print ("   0   1   2   3   4   5   6   7   8   9  10  11\n")
-			print (" +---+---+---+---+---+---+---+---+---+---+---+---+\n")
-			print (" | %c | %c | %c | %c | %c | %c | %c | %c | %c | %c | %c | %c |\n",
+			print (" ")
+			print ("***************** UI MODULE DEBUG ******************")
+			print ("   Current Instr: {0:04o}".format(self.IR))
+			print (" ")
+			print ("   0   1   2   3   4   5   6   7   8   9  10  11")
+			print (" +---+---+---+---+---+---+---+---+---+---+---+---+")
+			print (" | {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} | {10} | {11} |".format(
 				IR_str[0],IR_str[1],IR_str[2],IR_str[3],IR_str[4],IR_str[5],
-				IR_str[6],IR_str[7],IR_str[8],IR_str[9],IR_str[10],IR_str[11])
-			print (" +---+---+---+---+---+---+---+---+---+---+---+---+\n")
+				IR_str[6],IR_str[7],IR_str[8],IR_str[9],IR_str[10],IR_str[11]))
+			print (" +---+---+---+---+---+---+---+---+---+---+---+---+")
 		
 		# Group 1 Microinstructions: Check if bit 3 is a 0
 		if IR_str[3] == '0':
 			if self.debug_v:
-				print ("                  cla cll cma cml rar ral 0/1 iac\n")
-				print (" \n")
-				print ("Group 1 Microinstructions:\n")
+				print ("                  cla cll cma cml rar ral 0/1 iac")
+				print (" ")
+				print ("Group 1 Microinstructions:")
 			
 			# if bits IR[4:11] == 0, then the instruction is a NOP
-			if (((self.IR << 4) & word_mask) == 0):
+			if (((self.IR << 4) & self.word_mask) == 0):
 				# NOP
-				print (" -- NOP\n")
+				print (" -- NOP")
 			else:
 				# Sequence 1: CLA/CLL
 				# Check if bits 4 and 5 were set
 				if IR_str[4] == '1':
 					self.AC = 0
 					if self.debug_v:
-						print (" -- Clear Accumulator\n")
-						print ("                NEW AC: %04o\n", self.AC)
+						print (" -- Clear Accumulator")
+						print ("                NEW AC: {0:04o}".format(self.AC))
 				
 				if IR_str[5] == '1':
 					self.LR = 0
 					if self.debug_v:
-						print (" -- Clear Link Register\n")
-						print ("                NEW LR: %1o\n", self.LR)
+						print (" -- Clear Link Register")
+						print ("                NEW LR: {0:1o}".format(self.LR))
 				
 				# Sequence 2: CMA/CML
 				# Check if bits 6 and 7 were set
 				if IR_str[6] == '1':
 					self.AC = (~self.AC) & self.word_mask
 					if self.debug_v:
-						print (" -- Complement Accumulator\n")
-						print ("                NEW AC: %04o\n", self.AC)
+						print (" -- Complement Accumulator")
+						print ("                NEW AC: {0:04o}".format(self.AC))
 				
 				if IR_str[7] == '1':
 					self.LR = not(self.LR)	# use logical not here since LR is one bit only
 					if self.debug_v:
-						print (" -- Complement Link Register\n")
-						print ("                NEW LR: %1o\n", self.LR)
+						print (" -- Complement Link Register")
+						print ("                NEW LR: {0:1o}".format(self.LR))
 				
 				# Sequence 3: IAC
 				# Check if bit 11 is set
@@ -589,9 +600,9 @@ class PDP8_ISA(object):
 					self.AC = self.AC & self.word_mask 	# mask upper bits of AC to word size
 					
 					if self.debug_v:
-						print (" -- Complement Accumulator\n")
-						print ("                NEW AC: %04o\n", self.AC)
-						print ("                NEW LR: %1o", self.LR)
+						print (" -- Complement Accumulator")
+						print ("                NEW AC: {0:04o}".format(self.AC))
+						print ("                NEW LR: {0:1o}".format(self.LR))
 				
 				# Sequence 4: RAR/RAL
 				# Check if bits 8 and 9 have been set simultaneously: if so, this
@@ -600,7 +611,7 @@ class PDP8_ISA(object):
 				# to "execute" since performing the right and left rotate will cancel 
 				# each other out and leave the AC unchanged.
 				if (IR_str[8] == '1') and (IR_str[9] == '1'):
-					print ("WARNING: Micro Op instruction conflict at PC = [%04o]. Rotate Left and Rotate Right enabled simultaneously.\n", self.prevPC)
+					print ("WARNING: Micro Op instruction conflict at PC = [{0:04o}]. Rotate Left and Rotate Right enabled simultaneously.\n".format(self.prevPC))
 				
 				# Rotate right:
 				# Check bit 8, which indicates a rotate right operation
@@ -620,7 +631,7 @@ class PDP8_ISA(object):
 						tmp_rotate = tmp_rotate | (tmp_val >> 1)
 						
 						if self.debug_v:
-							print (" -- Rotate Accumulator and Link Right\n")
+							print (" -- Rotate Accumulator and Link Right")
 					
 					# Otherwise bit 10 (the 0/1 bit) is 1 --> rotate 2 positions right
 					else:
@@ -632,7 +643,7 @@ class PDP8_ISA(object):
 						tmp_rotate = tmp_rotate | (tmp_val >> 2)
 						
 						if self.debug_v:
-							print (" -- Rotate Accumulator and Link Right Twice\n")
+							print (" -- Rotate Accumulator and Link Right Twice")
 					
 					# The new value of LR should be the most significant
 					# bit of tmp_rotate, and the AC should be set to all the 
@@ -643,8 +654,8 @@ class PDP8_ISA(object):
 					
 					# Debug Print
 					if self.debug_v:
-						print ("                NEW LR: %1o\n", self.LR)
-						print ("                NEW AC: %04o\n", self.AC)
+						print ("                NEW LR: {0:1o}".format(self.LR))
+						print ("                NEW AC: {0:04o}".format(self.AC))
 				
 				# Rotate left
 				# Check if bit 9 is 1: RAL
@@ -662,7 +673,7 @@ class PDP8_ISA(object):
 						# after shifting them left one position.
 						tmp_rotate = tmp_rotate | ((tmp_val & self.word_mask) << 1)
 						if self.debug_v:
-							print (" -- Rotate Accumulator and Link Left\n")
+							print (" -- Rotate Accumulator and Link Left")
 					
 					# Otherwise bit 10(the 0/1 bit) is 1 --> rotate 2 positions left
 					else:
@@ -678,7 +689,7 @@ class PDP8_ISA(object):
 						# bits left.
 						tmp_rotate = tmp_rotate | (((tmp_val << 1) & self.word_mask) << 1)
 						if self.debug_v:
-							print (" -- Rotate Accumulator and Link Left Twice\n")
+							print (" -- Rotate Accumulator and Link Left Twice")
 											
 					# Next, the new value of LR should be the most significant
 					# bit of tmp_rotate, and the AC should be set to all the 
@@ -688,8 +699,8 @@ class PDP8_ISA(object):
 					
 					# Debug Print
 					if self.debug_v:
-						print ("                NEW LR: %1o\n", self.LR)
-						print ("                NEW AC: %04o\n", self.AC)
+						print ("                NEW LR: {0:1o}".format(self.LR))
+						print ("                NEW AC: {0:04o}".format(self.AC))
 
 		# Else, Bit 3 is 1, indicating either Group 2 or 3 Microinstructions
 		else:
@@ -698,9 +709,9 @@ class PDP8_ISA(object):
 				# OR subgroup: Check if bit 8 is set to 0 
 				if IR_str[8] == '0':
 					if self.debug_v:
-						print ("                  cla sma sza snl 0/1 osr hlt\n")
-						print (" \n")
-						print (" Group 2 Microinstructions:\n")
+						print ("                  cla sma sza snl 0/1 osr hlt")
+						print (" ")
+						print (" Group 2 Microinstructions:")
 					
 					# check if any of bits 5 through 7 were set, indicating
 					# that an OR skip condition was to be checked (this instruction
@@ -735,18 +746,18 @@ class PDP8_ISA(object):
 					# Debug Print: Indicating if any of the OR skip conditions were met
 					if self.debug_v and curr_branch_type == BRANCH_TYPE['CONDITIONAL']:
 						if curr_branch_taken:
-							print (" -- OR group condition(s) met: %s\n", str_OR_success)
+							print (" -- OR group condition(s) met: {0}".format(str_OR_success))
 						else:
-							print (" -- OR group condition(s) not met.\n")
-						print ("    Checked for: %s\n", str_skip_check)
+							print (" -- OR group condition(s) not met.")
+						print ("    Checked for: {0}".format(str_skip_check))
 
 				# Else, AND subgroup (bit 8 = 1)
 				else:
 					# debug print header
 					if self.debug_v:
-						print ("                  cla spa sna szl 0/1 osr hlt\n")
-						print (" \n")
-						print (" Group 2 Microinstructions:\n")
+						print ("                  cla spa sna szl 0/1 osr hlt")
+						print (" ")
+						print (" Group 2 Microinstructions:")
 					
 					# check if bits [5:7] were all zero: Skip Always should be 
 					# flagged as an unconditional branch.
@@ -791,35 +802,35 @@ class PDP8_ISA(object):
 					# Debug print
 					if self.debug_v and (curr_branch_type != BRANCH_TYPE['NO_BRANCH']):
 						if curr_branch_taken:
-							print (" -- AND group condition(s) met.\n")
+							print (" -- AND group condition(s) met.")
 						else:
-							print (" -- AND group condition(s) not met: %s\n", str_AND_fail)
-						print ("    Checked for: %s\n", str_skip_check)
+							print (" -- AND group condition(s) not met: {0}".format(str_AND_fail))
+						print ("    Checked for: {0}".format(str_skip_check))
 						
 				# CLA - Clear Accumulator: check if bit 4 is set
 				if IR_str[4] == '1':
 					self.AC = 0
 					if self.debug_v:
-						print (" -- CLA - Clear Accumulator\n")
-						print ("                NEW AC: %04o\n", self.AC)
+						print (" -- CLA - Clear Accumulator")
+						print ("                NEW AC: {0:04o}".format(self.AC))
 				
 				# OSR - Or Switch Register with Accumulator: check if bit 9 is set
 				if IR_str[9] == '1':
 					if self.debug_v:
-						print (" -- OSR - Or Switch Register with Accumulator\n")
-						print ("           Previous AC: %04o\n", self.AC)
-						print ("           Previous SR: %04o\n", self.SR)
+						print (" -- OSR - Or Switch Register with Accumulator")
+						print ("           Previous AC: {0:04o}".format(self.AC))
+						print ("           Previous SR: {0:04o}".format(self.SR))
 					
 					self.AC = self.AC | self.SR
 					
 					if self.debug_v:
-						print ("                NEW AC: %04o\n", self.AC)
+						print ("                NEW AC: {0:04o}".format(self.AC))
 				
 				# HLT - HaLT: check if bit 10 is set
 				if IR_str[10] == '1':
 					self.flagHLT = True
 					if self.debug_v:
-						print (" -- HLT - Halt\n")
+						print (" -- HLT - Halt")
 				
 				# If a Group 2 branch instruction was given:
 				if curr_branch_type != BRANCH_TYPE['NO_BRANCH']:
@@ -838,7 +849,7 @@ class PDP8_ISA(object):
 			else:
 				# These are not implemented, so should be noted as 
 				# illegal/unrecognized instructions
-				print ("WARNING: Group 3 MicroOp called at PC = [%04o]. Group 3 MicroOps not enabled in simulation.\n", self.PC)
+				print ("WARNING: Group 3 MicroOp called at PC = [{0:04o}]. Group 3 MicroOps not enabled in simulation.".format(self.PC))
 		
 		# Set the flags for which branch condition tests were made
 		self.branch_tests = str_skip_check
@@ -850,7 +861,7 @@ class PDP8_ISA(object):
 	# Description: "Executes" a NOP.
 	def op_default(self):
 		# do nothing, print warning that illegal opcode was given
-		print ("WARNING: Invalid opcode encountered at PC: [%04o]\n", self.prevPC)
+		print ("WARNING: Invalid opcode encountered at PC: [{0:04o}]".format(self.prevPC))
 
 	#-------------------------------------
 	# Function: execute
@@ -878,31 +889,112 @@ class PDP8_ISA(object):
 		self.opcode_str = OPCODE_NAME[self.opcode]
 		op_str = self.opcode_str 	# shorter name for easier use, read-only
 		
+		# Update Overall Instruction Count
+		self.instr_count['all'] = self.instr_count['all'] + 1
+		self.instr_count[op_str] = self.instr_count[op_str]+1
+		
+		if self.debug:
+			print (" ")
+			print ("================== INSTRUCTION #{0:-1d} : {1} ==================".format(self.instr_count['all'], self.opcode_str))
+			print ("             PC / IR: {0:04o} / {1:04o}".format(self.prevPC, self.IR))
+		
 		# STEP 2b: Determine the Effective Address
 		if (self.opcode >= 0 and self.opcode < 6):
 			self.eaddr = self.calc_eaddr()
+		else:
+			self.eaddr = 0
+		if self.debug_v:
+			print ("Step 2 Effective Address: {0:04o}".format(self.eaddr))
 		
 		# STEP 3: Execute Current Instruction
 		self.opcode_exec.get(self.opcode,self.op_default)()
 		# This will call the corresponding function based on the current opcode.
 		
-		# STEP 4: Update Stats for Opcodes
-		self.instr_count['all'] = self.instr_count['all'] + 1
-		self.instr_count[op_str] = self.instr_count[op_str]+1
+		# STEP 4: Update Cycle Stats for Opcodes
 		self.cycle_count['all'] = self.cycle_count['all'] + OPCODE_CYCLES[op_str]
 		self.cycle_count[op_str] = self.cycle_count[op_str]+OPCODE_CYCLES[op_str]
 		
 		# Print the basic debug values
 		if self.debug:
-			print ("\n")
-			print ("================== INSTRUCTION #%-1d : %s ==================\n", self.instr_count['all'], self.opcode_str)
-			print ("             PC / IR: %04o / %04o\n", self.prevPC, self.IR)
-			print ("             LR / AC: %1o / %04o \n", self.LR, self.AC)
-			print ("   EFFECTIVE ADDRESS: %04o\n", self.eaddr)
-			print ("   VALUE @ EFF. ADDR: %04o\n", self.mem[self.eaddr])
+			#print (" ")
+			#print ("================== INSTRUCTION #{0:-1d} : {1} ==================".format(self.instr_count['all'], self.opcode_str))
+			#print ("             PC / IR: {0:04o} / {1:04o}".format(self.prevPC, self.IR))
+			print ("             LR / AC: {0:1o} / {1:04o}".format(self.LR, self.AC))
+			print ("   EFFECTIVE ADDRESS: {0:04o}".format(self.eaddr))
+			print ("   VALUE @ EFF. ADDR: {0:04o}".format(self.mem[self.eaddr]))
 		
 		# return the HALT flag
 		return self.flagHLT
+	def print_statistics(self):
+		# PRINT OUT STATISTICS AND MEMORY IMAGE
+		# Print words in memory at all valid memory locations.
+		if self.debug:
+			print ("\n=====================================================")
+			print (" RESULTING MEMORY:")
+			for i in range(0, MEM_SIZE - 1):
+				if self.memvalid[i] == 1:
+					print ("Address: {0:04o}  Value: {1:04o}".format(i, self.mem[i]))
+			
+		
+		print ("\n=====================================================")
+		print ("STATISTICS\n");
+		print ("CPU Clocks Used: {0:-1d}".format(self.cycle_count['all']))
+		print ("Total Instructions: {0:-1d}".format(self.instr_count['all']))
+		print (" ")
+		print ("   Type    # of Instrs   # of Cycles")
+		print ("   ----    -----------   -----------")
+		print ("    AND    {0:10d}  {1:12d}".format(self.instr_count['AND'],self.cycle_count['AND']))
+		print ("    TAD    {0:10d}  {1:12d}".format(self.instr_count['TAD'],self.cycle_count['TAD']))
+		print ("    ISZ    {0:10d}  {1:12d}".format(self.instr_count['ISZ'],self.cycle_count['ISZ']))
+		print ("    DCA    {0:10d}  {1:12d}".format(self.instr_count['DCA'],self.cycle_count['DCA']))
+		print ("    JMS    {0:10d}  {1:12d}".format(self.instr_count['JMS'],self.cycle_count['JMS']))
+		print ("    JMP    {0:10d}  {1:12d}".format(self.instr_count['JMP'],self.cycle_count['JMP']))
+		print ("     IO    {0:10d}  {1:12d}".format(self.instr_count['IO'],self.cycle_count['IO']))
+		print ("     UI    {0:10d}  {1:12d}".format(self.instr_count['UI'],self.cycle_count['UI']))
+		print ("   ----    -----------   -----------")
+		print ("  TOTAL    {0:10d}  {1:12d}".format(self.instr_count['all'],self.cycle_count['all']))
+		print (" ")
+		print ("=====================================================")
+		print ("BRANCH STATISTICS\n")
+		print ("Total Number of Branches: {0} Taken / {1} Not Taken".format(
+			self.branch_uncond_count['all']+self.branch_cond_t_count['all'],
+			self.branch_cond_nt_count['all']))
+		print ("\nUnconditional Branches:\n")
+		print ("     Opcode     Taken ")
+		print ("     ------    ------- ")
+		print ("       JMS     {0:6d}".format(self.branch_uncond_count['JMS']))
+		print ("       JMP     {0:6d}".format(self.branch_uncond_count['JMP']))
+		print ("       UI      {0:6d}".format(self.branch_uncond_count['UI']))
+		print ("     ------    ------- ")
+		print ("      TOTAL    {0:6d}".format(self.branch_uncond_count['all']))
+		print ("\nConditional Branches:\n")
+		print ("     Opcode     Taken    Not Taken   Total #")
+		print ("     ------    -------   ---------   -------")
+		print ("       ISZ     {0:6d}    {1:8d}    {2:6d}".format(
+			self.branch_cond_t_count['ISZ'],
+			self.branch_cond_nt_count['ISZ'],
+			(self.branch_cond_t_count['ISZ']+self.branch_cond_nt_count['ISZ'])))
+		print ("       UI      {0:6d}    {1:8d}    {2:6d}".format(
+			self.branch_cond_t_count['UI'],
+			self.branch_cond_nt_count['UI'],
+			(self.branch_cond_t_count['UI']+self.branch_cond_nt_count['UI'])))
+		print ("     ------    -------   ---------   -------")
+		print ("      TOTAL    {0:6d}    {1:8d}    {2:6d}".format(
+			self.branch_cond_t_count['all'],
+			self.branch_cond_nt_count['all'],
+			(self.branch_cond_t_count['all']+self.branch_cond_nt_count['all'])))
+		#print ("Total Number of Unconditional Branches Taken: {0}".format(self.branch_uncond_count['all']));
+		#print ("         JMS Branches Taken: {0}".format(self.branch_uncond_count['JMS']));
+		#print ("         JMP Branches Taken: {0}".format(self.branch_uncond_count['JMP']));
+		#print ("   Uncond UI Branches Taken: {0}".format(self.branch_uncond_count['UI']));
+		#print ("Total Number of Conditional Branches Taken: {0} out of {1}".format(self.branch_cond_t_count['all'],
+		#	self.branch_cond_t_count['all']+self.branch_cond_nt_count['all']))
+		#print ("         ISZ Branches Taken: {0} out of {1}".format(self.branch_cond_t_count['ISZ'],
+		#	self.branch_cond_t_count['ISZ']+self.branch_cond_nt_count['ISZ']))
+		#print ("     Cond UI Branches Taken: {0} out of {1}".format(self.branch_cond_t_count['UI'],
+		#	self.branch_cond_t_count['UI']+self.branch_cond_nt_count['UI']))
+		print (" ")
+		print ("=====================================================\n")
 
 # parse the command line arguments
 import argparse
@@ -938,3 +1030,4 @@ myPDP8.open_tracefiles()	# open trace files for append
 while not halt:
 	halt = myPDP8.execute()	# execute next instruction
 myPDP8.close_tracefiles()	# close trace files
+myPDP8.print_statistics()	# print statistics

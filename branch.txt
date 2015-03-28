@@ -1,3 +1,13 @@
 PC [octal]    BRANCH TYPE         TAKEN/NOT TAKEN    TARGET ADDRESS [octal]
 ---------------------------------------------------------------------------
-0200          CONDITIONAL [UI ]    TAKEN              0202 
+0201          CONDITIONAL [ISZ]    NOT TAKEN          0202 
+0202          CONDITIONAL [ISZ]    NOT TAKEN          0203 
+0203          CONDITIONAL [ISZ]    NOT TAKEN          0204 
+0205          CONDITIONAL [ISZ]    TAKEN              0207 
+0207          CONDITIONAL [ISZ]    NOT TAKEN          0210 
+0210          CONDITIONAL [ISZ]    NOT TAKEN          0211 
+0212          UNCONDITIONAL [JMP]  TAKEN              0200 
+0201          CONDITIONAL [ISZ]    NOT TAKEN          0202 
+0202          CONDITIONAL [ISZ]    NOT TAKEN          0203 
+0203          CONDITIONAL [ISZ]    NOT TAKEN          0204 
+0205          CONDITIONAL [ISZ]    NOT TAKEN          0206 
