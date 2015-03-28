@@ -1,0 +1,3 @@
+PC [octal]    BRANCH TYPE         TAKEN/NOT TAKEN    TARGET ADDRESS [octal]
+---------------------------------------------------------------------------
+0200          CONDITIONAL [UI ]    TAKEN              0202 
