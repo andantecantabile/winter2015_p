@@ -26,10 +26,13 @@ parser.add_argument('--SR','--sr', nargs='?', const=0, default=0,
 SR = int(SR,8)	# convert to an int
 
 import pdp8_isa.py
-# load the memory image
-pdp8_isa.loadmemory(input_filename)
+myPDP8 = PDP8(debug,debug_verbose,SR) # instantiate a PDP8 object
+# clear trace files and load the memory image
+myPDP8.init_tracefiles()
+myPDP8.loadmemory(input_filename)
 halt = 0
-# continue to execute instructions until a halt instruction
-# has been encountered
+myPDP8.open_tracefiles()	# open trace files for append
+# execute until a halt instruction is encountered
 while !halt:
-	halt = pdp8_isa.execute()
+	halt = pdp8_isa.execute()	# execute next instruction
+myPDP8.close_tracefiles()	# close trace files
