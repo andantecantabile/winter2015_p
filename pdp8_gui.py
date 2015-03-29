@@ -1105,6 +1105,7 @@ class App:
 		#	self.mainframe.columnconfigure(column, weight=1)
 		self.mainframe.rowconfigure(1, weight=1)
 		
+		# Frame for menu buttons
 		self.menubar = ttk.Frame(self.mainframe, padding = (2,2,2,2))
 		self.menubar.grid(sticky='ew')
 		
@@ -1147,9 +1148,11 @@ class App:
 							command=self.root.quit)
 		self.btn_exit.grid(in_=self.menubar,row=0,column=5)
 		
+		# Separator between menubar and main part of window
 		self.separator = ttk.Frame(self.mainframe, borderwidth=2, relief='sunken')
 		self.separator.grid(in_=self.mainframe, column=0, row=1, columnspan=6, sticky='ew')
 		
+		# Frame for main part of window below menu buttons
 		self.sub_frame = ttk.LabelFrame(self.mainframe,padding=(2, 2, 2, 2),text="Simulation")
 		self.sub_frame.grid(column=0, row=2, columnspan=6, sticky='nsew')
 		
@@ -1168,8 +1171,23 @@ class App:
 		self.frame_regs = ttk.LabelFrame(self.sub_frame, text="Current Register Values", padding=(10, 10, 10, 10))
 		self.frame_regs.grid(column=0,row=4,sticky='ew')
 		# column 1:
-		#self.frame_mem = ttk.LabelFrame(self.sub_frame, text="Current Memory Image", padding=(5, 5, 5, 5))
-		#self.frame_SR.grid(column=1,row=0,rowspan=5,sticky='ew')
+		self.memframe1 = ttk.LabelFrame(self.sub_frame, text="Current Memory Image", padding=(5,5,5,5))
+		self.memframe1.grid(column=1,row=0,rowspan=5,sticky='nsew')
+		self.canvas = tk.Canvas(self.memframe1, borderwidth=0) # background="#ffffff"
+		self.memframe2 = ttk.Frame(self.canvas)
+		self.vsb = tk.Scrollbar(self.memframe1, orient="vertical", command=self.canvas.yview)
+		self.canvas.configure(yscrollcommand=self.vsb.set)
+		
+		self.vsb.pack(side="right", fill="y")
+		self.canvas.pack(side="left", fill="both", expand=True)
+		self.canvas.create_window((4,4), window=self.memframe2, anchor="nw", 
+			tags="self.memframe2")
+		# resize scrollbar
+		self.memframe2.bind("<Configure>", self.OnFrameConfigure)
+		# build memory table
+		self.memtable = ttk.Frame(self.memframe2)
+		self.memtable.grid(column=0,row=0,sticky='nsew')
+		self.populateMemTable()				
 		
 		# SR frame
 		self.lbl_SR_name = ttk.Label(self.frame_SR, text="SR:", padding=(2,2,2,5)).grid(in_=self.frame_SR,row=0,column=0,sticky='E', rowspan=2)
@@ -1244,6 +1262,39 @@ class App:
 		self.lbl_AC_name = ttk.Label(self.frame_regs, text="AC:", padding=(25,4,10,4)).grid(in_=self.frame_regs,row=1, column=2, sticky='E')
 		self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.AC_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
 	
+	# This function redraws the memory table
+	def populateMemTable(self):
+		# first, delete any existing widgets in memtable
+		for child in self.memtable.winfo_children():
+			child.destroy()
+		
+		self.mem_row_items = []
+		for i in range(100):
+			int_var = tk.IntVar()
+			self.mem_row_items.append([])
+			# Arrow item for indicating current PC
+			if i == 5:
+				self.mem_row_items[i].append(tk.Canvas(self.memtable,width=26,height=25))
+				self.mem_row_items[i][0].grid(row=i,column=0, sticky='ns')
+				self.mem_row_items[i][0].create_polygon(0,11, 15,11, 
+					15,5, 25,14, 15,23, 15,18, 0,18,
+					fill='forest green')
+				#self.mem_row_items[i][0].create_polygon(0,30, 80,30, 
+				#	80,0, 125,45, 80,90, 80,60, 0,60,
+				#	outline='SpringGreen4',
+				#	fill='forest green')
+			else:
+				self.mem_row_items[i].append(ttk.Label(self.memtable, text='', width=2, 
+					borderwidth="0").grid(row=i, column=0))
+			self.mem_row_items[i].append(ttk.Checkbutton(self.memtable,
+				command=self.changed_SR_val, variable=int_var,
+				onvalue=1, offvalue=0, padding=5))
+			self.mem_row_items[i][1].grid(in_=self.memtable,row=i,column=1,sticky='ew')
+			self.mem_row_items[i].append(ttk.Label(self.memtable, text="%s" % i, width=3, borderwidth="1", 
+				relief="solid").grid(row=i, column=2))
+			t="this is the second column for row %s" %i
+			self.mem_row_items[i].append(ttk.Label(self.memtable, text=t).grid(row=i, column=3))
+	
 	def open_file(self):
 		file_name = askopenfilename()
 		print (file_name)
@@ -1277,6 +1328,10 @@ class App:
 		self.PDP8.SR_oct_str.set(curr_SR_str)
 		# update label display
 		#self.lbl_SR_val.configure(text=u"%04o" % self.PDP8.SR)
+	
+	# Used to reset the scroll area to match size of the inner frame
+	def OnFrameConfigure(self, event):
+		self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
 # END CLASS DEFINITION FOR GUI APP
 #==============================================================================
