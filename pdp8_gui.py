@@ -12,6 +12,7 @@
 from math import log   	# needed for calculation of number of page bits
 import argparse			# needed parsing command line arguments
 from tkinter import *	# needed for GUI functions
+import tkinter.ttk
 from tkinter.filedialog import askopenfilename
 
 #==============================================================================
@@ -991,49 +992,93 @@ class PDP8_ISA(object):
 # GUI APP CLASS DEFINITIONS
 #----------------------------
 class App:
-	def __init__(self,master):
-		frame = Frame(master)
-		frame.pack()
-		# Build Menu
-		#fileMenu = Menu(self, tearoff=False)
-		#self.add_cascade(label="File",underline=0, menu=fileMenu)
-		#fileMenu.add_command(label="Open", underline = 1, command=self.open_file)
-		#filemenu.add_separator()
-		#fileMenu.add_command(label="Exit", underline = 1, command=self.quit)
+	def __init__(self,root):
+		self.root = root
+		self.root.title("PDP-8 ISA Simulator")
+		#master["padx"] = 5
+		#master["pady"] = 10
 		
-		self.img_open = PhotoImage(file="images/btn_open_file.gif")
-		self.btn_open = Button(frame,
-							image=self.img_open,
+		# background colors for highlighting memory
+		self.color_last_instr="#ffb700"
+		self.color_eaddr_read="#54b69a"
+		self.color_eaddr_write="#8171cc"
+		self.color_read="#007785"
+		self.color_write="#cc71a9"
+		self.color_default_bg="d9d7e0"
+		
+		# Main frame
+		self.mainframe = tkinter.ttk.Frame(self.root, padding=(5, 5, 10, 10))
+		self.mainframe.grid(sticky='nwse')
+		#for column in range(6):
+		#	self.mainframe.columnconfigure(column, weight=1)
+		self.mainframe.rowconfigure(1, weight=1)
+		
+		self.menubar = tkinter.ttk.Frame(self.mainframe, padding = (2,2,2,2))
+		self.menubar.grid(sticky='ew')
+		
+		# Menu bar buttons:
+		s = tkinter.ttk.Style()
+		# Open File button
+		s.configure('Open.TButton', foreground='midnight blue')
+		self.btn_open = tkinter.ttk.Button(self.menubar,
+							text='OPEN FILE', style='Open.TButton',
 							command=self.open_file)
-		self.btn_open.pack(side=LEFT)
-		self.img_start = PhotoImage(file="images/btn_start.gif")
-		self.btn_start = Button(frame,
-							image=self.img_start,
+		self.btn_open.grid(in_=self.menubar,row=0,column=0)
+		# Start button
+		s.configure('Start.TButton', foreground='purple4')
+		self.btn_start = tkinter.ttk.Button(self.menubar,
+							text="START/CONTINUE", style='Start.TButton',
 							command=self.execute)
-		self.btn_start.pack(side=LEFT)
-		self.img_step = PhotoImage(file="images/btn_step.gif")
-		self.btn_step = Button(frame,
-							image=self.img_step,
+		self.btn_start.grid(in_=self.menubar,row=0,column=1)
+		# Step button
+		s.configure('Step.TButton', foreground='DarkOrchid4')
+		self.btn_step = tkinter.ttk.Button(self.menubar,
+							text="STEP/NEXT", style='Step.TButton',
 							command=self.execute_next)
-		self.btn_step.pack(side=LEFT)
-		self.img_restart = PhotoImage(file="images/btn_restart.gif")
-		self.btn_restart = Button(frame,
-							image=self.img_restart,
+		self.btn_step.grid(in_=self.menubar,row=0,column=2)
+		# Restart button
+		s.configure('Restart.TButton', foreground='dark goldenrod')
+		self.btn_restart = tkinter.ttk.Button(self.menubar,
+							text="RESTART", style='Restart.TButton',
 							command=self.restart)
-		self.btn_restart.pack(side=LEFT)
-		self.img_stats = PhotoImage(file="images/btn_stats.gif")
-		self.btn_stats = Button(frame,
-							image=self.img_stats,
+		self.btn_restart.grid(in_=self.menubar,row=0,column=3)
+		# View Stats button
+		s.configure('Stats.TButton', foreground='indian red')
+		self.btn_stats = tkinter.ttk.Button(self.menubar,
+							text="VIEW STATS", style='Stats.TButton',
 							command=self.view_stats)
-		self.btn_stats.pack(side=LEFT)
-		self.img_exit = PhotoImage(file="images/btn_exit.gif")
-		self.btn_exit = Button(frame,
-							image=self.img_exit,
-							command=frame.quit)
-		self.btn_exit.pack(side=LEFT)
+		self.btn_stats.grid(in_=self.menubar,row=0,column=4)
+		# Exit button
+		s.configure('Exit.TButton', foreground='firebrick4')
+		self.btn_exit = tkinter.ttk.Button(self.menubar,
+							text="EXIT", style='Exit.TButton',
+							command=self.root.quit)
+		self.btn_exit.grid(in_=self.menubar,row=0,column=5)
+		
+		self.separator = tkinter.ttk.Frame(self.mainframe,height=2, borderwidth=2, relief=SUNKEN)
+		self.separator.grid(in_=self.mainframe, column=0, row=1, columnspan=6, sticky='ew')
+		
+		self.sub_frame = tkinter.ttk.LabelFrame(self.mainframe,padding=(2, 2, 2, 2),text="Simulation")
+		self.sub_frame.grid(column=0, row=2, columnspan=6, sticky='nsew')
+		
+		self.frame_SR = tkinter.ttk.LabelFrame(self.sub_frame, text="Switch Register", padding=(5, 5, 5, 5))
+		self.frame_SR.grid(column=0,row=0)
+		self.frame_last_instr = tkinter.ttk.LabelFrame(self.sub_frame, text="Last Executed Instruction", padding=(5, 5, 5, 5))
+		self.frame_last_instr.grid(column=0,row=1)
+		self.frame_regs = tkinter.ttk.LabelFrame(self.sub_frame, text="Current Register Values", padding=(5, 5, 5, 5))
+		self.frame_regs.grid(column=0,row=2)
+		
+		# Last Executed Instruction Labels
+		self.lbl_prevPC_name = tkinter.ttk.Label(self.frame_last_instr, text="Previous PC:").grid(in_=self.frame_last_instr,row=0,column=0, sticky=E)
+		self.lbl_IR_name = tkinter.ttk.Label(self.frame_last_instr, text="IR:").grid(in_=self.frame_last_instr,row=1, column=0, sticky=E)
+		self.lbl_opcode_name = tkinter.ttk.Label(self.frame_last_instr, text="OPCODE:").grid(in_=self.frame_last_instr,row=1, column=2, sticky=E)
+		self.frame_bin_IR = tkinter.ttk.Frame(self.frame_last_instr).grid(in_=self.frame_last_instr,row=2,column=0)
+		
+		
+		# Register Value Labels
 	
 	def open_file(self):
-		name = askopenfilename()
+		file_name = askopenfilename()
 		print (file_name)
 	
 	def execute(self):
