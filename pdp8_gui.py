@@ -11,8 +11,8 @@
 
 from math import log   	# needed for calculation of number of page bits
 import argparse			# needed parsing command line arguments
-from tkinter import *	# needed for GUI functions
-import tkinter.ttk
+import tkinter as tk	# needed for GUI functions
+import tkinter.ttk as ttk
 from tkinter.filedialog import askopenfilename
 
 #==============================================================================
@@ -36,6 +36,7 @@ ADDR_MEMORY_PAGE_BIT = int(4)
 # Calculated Constants
 MEM_SIZE = PDP8_WORDS_PER_PAGE * PDP8_PAGE_NUM
 PAGE_BITS = int(log(PDP8_PAGE_NUM, 2))
+PDP8_OCT_DIGITS = PDP8_WORD_SIZE / 3
 # Address Indices for page and offset
 ADDR_PAGE_LOW = int(0)
 ADDR_PAGE_HIGH = int(PAGE_BITS - 1)
@@ -117,6 +118,21 @@ class PDP8_ISA(object):
 		self.mem_eaddr = 0	# value in memory @ eaddr
 		self.prevPC = 0		# PC of the current(last executed) instruction
 		self.flagHLT = False
+		# Octal Strings for register values
+		self.IR_oct_str = tk.StringVar()
+		self.IR_oct_str.set('0000')
+		self.PC_oct_str = tk.StringVar()
+		self.PC_oct_str.set('0000')
+		self.AC_oct_str = tk.StringVar()
+		self.AC_oct_str.set('0000')
+		self.SR_oct_str = tk.StringVar()
+		self.SR_oct_str.set('0000')
+		self.eaddr_oct_str = tk.StringVar()
+		self.eaddr_oct_str.set('0000')
+		self.mem_eaddr_oct_str = tk.StringVar()
+		self.mem_eaddr_oct_str.set('0000')
+		self.prevPC_oct_str = tk.StringVar()
+		self.prevPC_oct_str.set('0000')
 		
 		# locations last accessed in memory; used in GUI
 		self.mem_ref = {
@@ -915,6 +931,43 @@ class PDP8_ISA(object):
 			print ("   EFFECTIVE ADDRESS: {0:04o}".format(self.eaddr))
 			print ("   VALUE @ EFF. ADDR: {0:04o}".format(self.mem[self.eaddr]))
 		
+		# Update all octal string values for GUI display
+		# IR:
+		tmp_val = oct(self.IR)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.IR_oct_str.set(tmp_val)
+		# PC:
+		tmp_val = oct(self.PC)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.PC_oct_str.set(tmp_val)
+		# AC:
+		tmp_val = oct(self.AC)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.AC_oct_str.set(tmp_val)
+		# SR:
+		tmp_val = oct(self.SR)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.SR_oct_str.set(tmp_val)
+		# eaddr:
+		tmp_val = oct(self.eaddr)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.eaddr_oct_str.set(tmp_val)
+		# mem[eaddr]:
+		tmp_val = oct(self.mem_eaddr)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.mem_eaddr_oct_str.set(tmp_val)
+		# prevPC:
+		tmp_val = oct(self.prevPC)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.prevPC_oct_str.set(tmp_val)
+		
 		# return the HALT flag
 		return self.flagHLT
 	
@@ -1007,92 +1060,93 @@ class App:
 		self.color_default_bg="d9d7e0"
 		
 		# Main frame
-		self.mainframe = tkinter.ttk.Frame(self.root, padding=(5, 5, 10, 10))
+		self.mainframe = ttk.Frame(self.root, padding=(5, 5, 10, 10))
 		self.mainframe.grid(sticky='nwse')
 		#for column in range(6):
 		#	self.mainframe.columnconfigure(column, weight=1)
 		self.mainframe.rowconfigure(1, weight=1)
 		
-		self.menubar = tkinter.ttk.Frame(self.mainframe, padding = (2,2,2,2))
+		self.menubar = ttk.Frame(self.mainframe, padding = (2,2,2,2))
 		self.menubar.grid(sticky='ew')
 		
 		# Menu bar buttons:
-		s = tkinter.ttk.Style()
+		s = ttk.Style()
 		# Open File button
 		s.configure('Open.TButton', foreground='midnight blue')
-		self.btn_open = tkinter.ttk.Button(self.menubar,
+		self.btn_open = ttk.Button(self.menubar,
 							text='OPEN FILE', style='Open.TButton',
 							command=self.open_file)
 		self.btn_open.grid(in_=self.menubar,row=0,column=0)
 		# Start button
 		s.configure('Start.TButton', foreground='purple4')
-		self.btn_start = tkinter.ttk.Button(self.menubar,
+		self.btn_start = ttk.Button(self.menubar,
 							text="START/CONTINUE", style='Start.TButton',
 							command=self.execute)
 		self.btn_start.grid(in_=self.menubar,row=0,column=1)
 		# Step button
 		s.configure('Step.TButton', foreground='DarkOrchid4')
-		self.btn_step = tkinter.ttk.Button(self.menubar,
+		self.btn_step = ttk.Button(self.menubar,
 							text="STEP/NEXT", style='Step.TButton',
 							command=self.execute_next)
 		self.btn_step.grid(in_=self.menubar,row=0,column=2)
 		# Restart button
 		s.configure('Restart.TButton', foreground='dark goldenrod')
-		self.btn_restart = tkinter.ttk.Button(self.menubar,
+		self.btn_restart = ttk.Button(self.menubar,
 							text="RESTART", style='Restart.TButton',
 							command=self.restart)
 		self.btn_restart.grid(in_=self.menubar,row=0,column=3)
 		# View Stats button
 		s.configure('Stats.TButton', foreground='indian red')
-		self.btn_stats = tkinter.ttk.Button(self.menubar,
+		self.btn_stats = ttk.Button(self.menubar,
 							text="VIEW STATS", style='Stats.TButton',
 							command=self.view_stats)
 		self.btn_stats.grid(in_=self.menubar,row=0,column=4)
 		# Exit button
 		s.configure('Exit.TButton', foreground='firebrick4')
-		self.btn_exit = tkinter.ttk.Button(self.menubar,
+		self.btn_exit = ttk.Button(self.menubar,
 							text="EXIT", style='Exit.TButton',
 							command=self.root.quit)
 		self.btn_exit.grid(in_=self.menubar,row=0,column=5)
 		
-		self.separator = tkinter.ttk.Frame(self.mainframe,height=2, borderwidth=2, relief=SUNKEN)
+		self.separator = ttk.Frame(self.mainframe,height=2, borderwidth=2, relief='sunken')
 		self.separator.grid(in_=self.mainframe, column=0, row=1, columnspan=6, sticky='ew')
 		
-		self.sub_frame = tkinter.ttk.LabelFrame(self.mainframe,padding=(2, 2, 2, 2),text="Simulation")
+		self.sub_frame = ttk.LabelFrame(self.mainframe,padding=(2, 2, 2, 2),text="Simulation")
 		self.sub_frame.grid(column=0, row=2, columnspan=6, sticky='nsew')
 		
-		self.frame_SR = tkinter.ttk.LabelFrame(self.sub_frame, text="Switch Register", padding=(5, 5, 5, 5))
+		self.frame_SR = ttk.LabelFrame(self.sub_frame, text="Switch Register", padding=(5, 5, 5, 5))
 		self.frame_SR.grid(column=0,row=0)
-		self.frame_last_instr = tkinter.ttk.LabelFrame(self.sub_frame, text="Last Executed Instruction", padding=(5, 5, 5, 5))
+		self.frame_last_instr = ttk.LabelFrame(self.sub_frame, text="Last Executed Instruction", padding=(5, 5, 5, 5))
 		self.frame_last_instr.grid(column=0,row=1)
-		self.frame_regs = tkinter.ttk.LabelFrame(self.sub_frame, text="Current Register Values", padding=(5, 5, 5, 5))
+		self.frame_regs = ttk.LabelFrame(self.sub_frame, text="Current Register Values", padding=(5, 5, 5, 5))
 		self.frame_regs.grid(column=0,row=2)
 		
 		# SR frame
-		self.lbl_SR_name = tkinter.ttk.Label(self.frame_SR, text="SR:").grid(in_=self.frame_SR,row=0,column=0,sticky=E, rowspan=2)
-		self.lbl_SR_val = tkinter.ttk.Label(self.frame_SR, text=u"%04o" % self.PDP8.SR, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
-		self.SR_chk_box = list()
-		self.SR_bin_val = list()
+		self.lbl_SR_name = ttk.Label(self.frame_SR, text="SR:").grid(in_=self.frame_SR,row=0,column=0,sticky='E', rowspan=2)
+		self.lbl_SR_val = ttk.Label(self.frame_SR, textvariable=self.PDP8.SR_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
+		self.SR_chk_box = []
+		self.SR_bin_val = []
 		SR_bin_start = bin(self.PDP8.SR)
 		SR_bin_start = SR_bin_start[2:]	# trim leading '0b'
 		while len(SR_bin_start) < PDP8_WORD_SIZE:
 			SR_bin_start = '0'+SR_bin_start
-		tkinter.ttk.Label(self.frame_SR, padding=(25,2,5,2), text="Bit #:").grid(in_=self.frame_SR,row=0,column=2)
-		for i in range(12):
-			self.SR_bin_val.append(int(SR_bin_start[i]))
-			tkinter.ttk.Label(self.frame_SR, text=u"%s" % str(i), padding = (2,2,2,2), anchor='center').grid(in_=self.frame_SR,row=0,column=(i+3),sticky='w')
-			self.SR_chk_box.append(0)
-			self.SR_chk_box[i] = tkinter.ttk.Checkbutton(self.frame_SR,
-				command=self.changed_SR_val, variable=self.SR_bin_val[i],
-				onvalue=1, offvalue=0)
+		ttk.Label(self.frame_SR, padding=(25,2,5,2), text="Bit #:").grid(in_=self.frame_SR,row=0,column=2)
+		for i in range(PDP8_WORD_SIZE):
+			int_var = tk.IntVar()
+			#self.SR_bin_val[i] = int(SR_bin_start[i])
+			ttk.Label(self.frame_SR, text=u"%s" % str(i), padding = (2,2,2,2), anchor='center').grid(in_=self.frame_SR,row=0,column=(i+3),sticky='w')
+			self.SR_chk_box.append(ttk.Checkbutton(self.frame_SR,
+				command=self.changed_SR_val, variable=int_var,
+				onvalue=1, offvalue=0))
 			self.SR_chk_box[i].grid(in_=self.frame_SR,row=1,column=(i+3),sticky='ew')
-			
+			self.SR_chk_box[i].state = int(SR_bin_start[i])
+			self.SR_bin_val.append(int_var)
 		
 		# Last Executed Instruction Labels
-		self.lbl_prevPC_name = tkinter.ttk.Label(self.frame_last_instr, text="Previous PC:").grid(in_=self.frame_last_instr,row=0,column=0, sticky=E)
-		self.lbl_IR_name = tkinter.ttk.Label(self.frame_last_instr, text="IR:").grid(in_=self.frame_last_instr,row=1, column=0, sticky=E)
-		self.lbl_opcode_name = tkinter.ttk.Label(self.frame_last_instr, text="OPCODE:").grid(in_=self.frame_last_instr,row=1, column=2, sticky=E)
-		self.frame_bin_IR = tkinter.ttk.Frame(self.frame_last_instr).grid(in_=self.frame_last_instr,row=2,column=0)
+		self.lbl_prevPC_name = ttk.Label(self.frame_last_instr, text="Previous PC:").grid(in_=self.frame_last_instr,row=0,column=0, sticky='E')
+		self.lbl_IR_name = ttk.Label(self.frame_last_instr, text="IR:").grid(in_=self.frame_last_instr,row=1, column=0, sticky='E')
+		self.lbl_opcode_name = ttk.Label(self.frame_last_instr, text="OPCODE:").grid(in_=self.frame_last_instr,row=1, column=2, sticky='E')
+		self.frame_bin_IR = ttk.Frame(self.frame_last_instr).grid(in_=self.frame_last_instr,row=2,column=0)
 		
 		
 		# Register Value Labels
@@ -1114,7 +1168,22 @@ class App:
 		print ("View Statistics")
 		
 	def changed_SR_val(self):
-		print ("Update SR val")
+		# recalculate the current SR_val
+		curr_SR = ''
+		for i in range(PDP8_WORD_SIZE):
+			if self.SR_bin_val[i].get() == 0:
+				curr_SR = curr_SR + '0'
+			else:
+				curr_SR = curr_SR + '1'
+		curr_SR_val = int(curr_SR,2)
+		# save it to PDP8 class
+		self.PDP8.SR = curr_SR_val
+		curr_SR_str = oct(curr_SR_val)[2:]
+		while len(curr_SR_str) < PDP8_OCT_DIGITS:
+			curr_SR_str = '0' + curr_SR_str		# add leading zero digits
+		self.PDP8.SR_oct_str.set(curr_SR_str)
+		# update label display
+		#self.lbl_SR_val.configure(text=u"%04o" % self.PDP8.SR)
 
 # END CLASS DEFINITION FOR GUI APP
 #==============================================================================
@@ -1147,7 +1216,7 @@ else:
 	SR = 0
 	
 # GUI Testing
-root = Tk()
+root = tk.Tk()
 app = App(root,args.debug,args.debug_verbose,SR)
 root.mainloop()
 
