@@ -87,6 +87,14 @@ EADDR_CYCLES = {
 	'Indirect': 1 	# Indirect Addressing: 1 additional cycle  
 }
 
+# BIT POSITION LABELS FOR UI INSTRUCTIONS
+BIT_POS_LBL = {
+	'UI_GRP1': ['','','','','cla','cll','cma','cml','rar','ral','0/1','iac'],
+	'UI_GRP2_OR': ['','','','','cla','sma','sza','snl','0/1','osr','hlt'],
+	'UI_GRP2_AND': ['','','','','cla','spa','sna','szl','0/1','osr','hlt'],
+	'OTHER': ['','','','','','','','','','','','']
+}
+
 # END LIST OF CONSTANTS
 #==============================================================================
 
@@ -133,7 +141,22 @@ class PDP8_ISA(object):
 		self.mem_eaddr_oct_str.set('0000')
 		self.prevPC_oct_str = tk.StringVar()
 		self.prevPC_oct_str.set('0000')
-		
+		# Additional Label strings for GUI
+		self.lbl_LR = tk.StringVar()
+		self.lbl_LR.set('0')
+		self.lbl_opcode_str = tk.StringVar()
+		self.lbl_opcode_str.set('NOP')
+		# IR binary digits
+		self.lbl_IR_bin = []
+		for i in range(PDP8_WORD_SIZE):
+			self.lbl_IR_bin.append(tk.StringVar())
+			self.lbl_IR_bin[i].set('0')
+		# bit position labels
+		self.bit_pos_display_type = 'OTHER'
+		self.lbl_IR_bit_lbl = []
+		for i in range(PDP8_WORD_SIZE):
+			self.lbl_IR_bit_lbl.append(tk.StringVar())
+			self.lbl_IR_bit_lbl[i].set('')
 		# locations last accessed in memory; used in GUI
 		self.mem_ref = {
 			'eaddr_read': -1,
@@ -566,6 +589,7 @@ class PDP8_ISA(object):
 		
 		# Group 1 Microinstructions: Check if bit 3 is a 0
 		if IR_str[3] == '0':
+			self.bit_pos_display_type = 'UI_GRP1'
 			if self.debug_v:
 				print ("                  cla cll cma cml rar ral 0/1 iac")
 				print (" ")
@@ -721,6 +745,7 @@ class PDP8_ISA(object):
 			if IR_str[11] == '0':
 				# OR subgroup: Check if bit 8 is set to 0 
 				if IR_str[8] == '0':
+					self.bit_pos_display_type = 'UI_GRP2_OR'
 					if self.debug_v:
 						print ("                  cla sma sza snl 0/1 osr hlt")
 						print (" ")
@@ -766,6 +791,7 @@ class PDP8_ISA(object):
 
 				# Else, AND subgroup (bit 8 = 1)
 				else:
+					self.bit_pos_display_type = 'UI_GRP2_AND'
 					# debug print header
 					if self.debug_v:
 						print ("                  cla spa sna szl 0/1 osr hlt")
@@ -889,6 +915,8 @@ class PDP8_ISA(object):
 		self.mem_ref['eaddr_write'] = -1
 		self.mem_ref['mem_read'] = -1
 		self.mem_ref['mem_write'] = -1
+		# Set default string for bit_pos_display_type
+		self.bit_pos_display_type='OTHER'
 		
 		# STEP 1: Fetch the current instruction, increment PC
 		self.IR = self.read_mem(self.PC,'FETCH')
@@ -931,12 +959,16 @@ class PDP8_ISA(object):
 			print ("   EFFECTIVE ADDRESS: {0:04o}".format(self.eaddr))
 			print ("   VALUE @ EFF. ADDR: {0:04o}".format(self.mem[self.eaddr]))
 		
-		# Update all octal string values for GUI display
+		# Update all string values for GUI display
 		# IR:
 		tmp_val = oct(self.IR)[2:]
 		while len(tmp_val) < PDP8_OCT_DIGITS:
 			tmp_val = '0' + tmp_val		# add leading zero digits
 		self.IR_oct_str.set(tmp_val)
+		# IR binary values:
+		tmp_val = bin(self.IR)[2:]
+		for i in range(PDP8_WORD_SIZE):
+			self.lbl_IR_bin[i].set(tmp_val[i])
 		# PC:
 		tmp_val = oct(self.PC)[2:]
 		while len(tmp_val) < PDP8_OCT_DIGITS:
@@ -967,6 +999,13 @@ class PDP8_ISA(object):
 		while len(tmp_val) < PDP8_OCT_DIGITS:
 			tmp_val = '0' + tmp_val		# add leading zero digits
 		self.prevPC_oct_str.set(tmp_val)
+		# LR:
+		self.lbl_LR.set(int(self.LR))
+		# Opcode:
+		self.lbl_opcode_str.set(self.opcode_str)
+		# Bit Position Labels:
+		for i in range(PDP8_WORD_SIZE):
+			self.lbl_IR_bit_lbl[i].set(BIT_POS_LBL[self.bit_pos_display_type][i])
 		
 		# return the HALT flag
 		return self.flagHLT
@@ -1108,21 +1147,32 @@ class App:
 							command=self.root.quit)
 		self.btn_exit.grid(in_=self.menubar,row=0,column=5)
 		
-		self.separator = ttk.Frame(self.mainframe,height=2, borderwidth=2, relief='sunken')
+		self.separator = ttk.Frame(self.mainframe, borderwidth=2, relief='sunken')
 		self.separator.grid(in_=self.mainframe, column=0, row=1, columnspan=6, sticky='ew')
 		
 		self.sub_frame = ttk.LabelFrame(self.mainframe,padding=(2, 2, 2, 2),text="Simulation")
 		self.sub_frame.grid(column=0, row=2, columnspan=6, sticky='nsew')
 		
+		# sub frame components
+		# column 0:
 		self.frame_SR = ttk.LabelFrame(self.sub_frame, text="Switch Register", padding=(5, 5, 5, 5))
-		self.frame_SR.grid(column=0,row=0)
+		self.frame_SR.grid(column=0,row=0,sticky='ew')
+		self.sep3a = ttk.Frame(self.sub_frame, padding=(0,0,0,0))
+		self.sep3a.grid(column=0,row=1,sticky='ns')
+		ttk.Label(self.sep3a, text='').grid(in_=self.sep3a,row=0,column=0)
 		self.frame_last_instr = ttk.LabelFrame(self.sub_frame, text="Last Executed Instruction", padding=(5, 5, 5, 5))
-		self.frame_last_instr.grid(column=0,row=1)
-		self.frame_regs = ttk.LabelFrame(self.sub_frame, text="Current Register Values", padding=(5, 5, 5, 5))
-		self.frame_regs.grid(column=0,row=2)
+		self.frame_last_instr.grid(column=0,row=2, sticky='ew')
+		self.sep3b = ttk.Frame(self.sub_frame, padding=(0,0,0,0))
+		self.sep3b.grid(column=0,row=3,sticky='ns')
+		ttk.Label(self.sep3b, text='').grid(in_=self.sep3b,row=0,column=0)
+		self.frame_regs = ttk.LabelFrame(self.sub_frame, text="Current Register Values", padding=(10, 10, 10, 10))
+		self.frame_regs.grid(column=0,row=4,sticky='ew')
+		# column 1:
+		#self.frame_mem = ttk.LabelFrame(self.sub_frame, text="Current Memory Image", padding=(5, 5, 5, 5))
+		#self.frame_SR.grid(column=1,row=0,rowspan=5,sticky='ew')
 		
 		# SR frame
-		self.lbl_SR_name = ttk.Label(self.frame_SR, text="SR:").grid(in_=self.frame_SR,row=0,column=0,sticky='E', rowspan=2)
+		self.lbl_SR_name = ttk.Label(self.frame_SR, text="SR:", padding=(2,2,2,5)).grid(in_=self.frame_SR,row=0,column=0,sticky='E', rowspan=2)
 		self.lbl_SR_val = ttk.Label(self.frame_SR, textvariable=self.PDP8.SR_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
 		self.SR_chk_box = []
 		self.SR_bin_val = []
@@ -1134,22 +1184,65 @@ class App:
 		for i in range(PDP8_WORD_SIZE):
 			int_var = tk.IntVar()
 			#self.SR_bin_val[i] = int(SR_bin_start[i])
-			ttk.Label(self.frame_SR, text=u"%s" % str(i), padding = (2,2,2,2), anchor='center').grid(in_=self.frame_SR,row=0,column=(i+3),sticky='w')
+			ttk.Label(self.frame_SR, text=u"%s" % str(i), padding = (0,3,0,3), anchor='center').grid(in_=self.frame_SR,row=0,column=(i+3),sticky='ns')
 			self.SR_chk_box.append(ttk.Checkbutton(self.frame_SR,
 				command=self.changed_SR_val, variable=int_var,
-				onvalue=1, offvalue=0))
+				onvalue=1, offvalue=0, padding=5))
 			self.SR_chk_box[i].grid(in_=self.frame_SR,row=1,column=(i+3),sticky='ew')
 			self.SR_chk_box[i].state = int(SR_bin_start[i])
 			self.SR_bin_val.append(int_var)
 		
 		# Last Executed Instruction Labels
-		self.lbl_prevPC_name = ttk.Label(self.frame_last_instr, text="Previous PC:").grid(in_=self.frame_last_instr,row=0,column=0, sticky='E')
-		self.lbl_IR_name = ttk.Label(self.frame_last_instr, text="IR:").grid(in_=self.frame_last_instr,row=1, column=0, sticky='E')
-		self.lbl_opcode_name = ttk.Label(self.frame_last_instr, text="OPCODE:").grid(in_=self.frame_last_instr,row=1, column=2, sticky='E')
-		self.frame_bin_IR = ttk.Frame(self.frame_last_instr).grid(in_=self.frame_last_instr,row=2,column=0)
-		
+		self.lbl_prevPC_name = ttk.Label(self.frame_last_instr, text="Previous PC:", padding=(2,4,10,4)).grid(in_=self.frame_last_instr,row=0,column=0, sticky='E')
+		self.lbl_prevPC_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.prevPC_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=0,column=1,sticky='W')
+		self.lbl_IR_name = ttk.Label(self.frame_last_instr, text="IR:", padding=(2,4,10,4)).grid(in_=self.frame_last_instr,row=1, column=0, sticky='E')
+		self.lbl_IR_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.IR_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=1,sticky='W')
+		self.lbl_opcode_name = ttk.Label(self.frame_last_instr, text="OPCODE:", padding=(25,2,10,2)).grid(in_=self.frame_last_instr,row=1, column=2, sticky='E')
+		self.lbl_opcode_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.lbl_opcode_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=3,sticky='W')
+		self.frame_bin_IR = ttk.LabelFrame(self.frame_last_instr,text="IR Value Displayed in Binary Bits", padding=(5, 5, 5, 5))
+		self.frame_bin_IR.grid(row=2,column=0,columnspan=4,padx=3,pady=10)
+		self.IR_bin_lbl = []
+		self.IR_bin_bit_lbl = []
+		s = ttk.Style()
+		s.configure('BitNum.TLabel', background='LightSteelBlue3')
+		s.configure('BitVal.TLabel', background='azure3')
+		s.configure('BitName.TLabel', background='LightSteelBlue3')
+		for i in range(PDP8_WORD_SIZE):
+			ttk.Label(self.frame_bin_IR, text=u"%s" % str(i), padding = (10,5,10,5), style='BitNum.TLabel', anchor='center').grid(in_=self.frame_bin_IR,row=0,column=2*i,sticky='nsew')
+			# vertical separator
+			self.separator1a = ttk.Frame(self.frame_bin_IR,borderwidth=2, relief='flat')
+			self.separator1a.grid(in_=self.frame_bin_IR, column=2*i+1, row=0, sticky='ns')
+			#ttk.Label(self.frame_bin_IR, text='', padding = (1,0,0,0)).grid(in_=self.frame_bin_IR,row=0,column=2*i+1,sticky='nsew')
+			self.IR_bin_lbl.append(ttk.Label(self.frame_bin_IR,
+				textvariable=self.PDP8.lbl_IR_bin[i], padding = (10,5,10,5), style='BitVal.TLabel', 
+				anchor='center').grid(in_=self.frame_bin_IR,row=2,column=2*i,sticky='nsew'))
+			# vertical separator
+			self.separator1b = ttk.Frame(self.frame_bin_IR,borderwidth=2, relief='flat')
+			self.separator1b.grid(in_=self.frame_bin_IR, column=2*i+1, row=1, sticky='ns')
+			#ttk.Label(self.frame_bin_IR, text='', padding = (1,0,0,0)).grid(in_=self.frame_bin_IR,row=2,column=2*i+1,sticky='nsew')
+			self.IR_bin_lbl.append(ttk.Label(self.frame_bin_IR,
+				textvariable=self.PDP8.lbl_IR_bit_lbl[i], padding = (10,5,10,5), style='BitName.TLabel',
+				anchor='center').grid(in_=self.frame_bin_IR,row=4,column=2*i,sticky='nsew'))
+			# vertical separator
+			self.separator1c = ttk.Frame(self.frame_bin_IR,borderwidth=2, relief='flat')
+			self.separator1c.grid(in_=self.frame_bin_IR, column=2*i+1, row=2, sticky='ns')
+			#ttk.Label(self.frame_bin_IR, text='', padding = (1,0,0,0)).grid(in_=self.frame_bin_IR,row=4,column=2*i+1,sticky='nsew')
+		# horizontal separators
+		self.separator2a = ttk.Frame(self.frame_bin_IR,borderwidth=2, relief='flat')
+		self.separator2a.grid(in_=self.frame_bin_IR, column=0, row=1, columnspan=2*PDP8_WORD_SIZE, sticky='ew')
+		self.separator2b = ttk.Frame(self.frame_bin_IR, borderwidth=2, relief='flat')
+		self.separator2b.grid(in_=self.frame_bin_IR, column=0, row=3, columnspan=2*PDP8_WORD_SIZE, sticky='ew')
+		#ttk.Label(self.frame_bin_IR, padding = (0,1,0,0)).grid(in_=self.frame_bin_IR,row=1,column=0,columnspan=2*PDP8_WORD_SIZE,sticky='nsew')
+		#ttk.Label(self.frame_bin_IR, padding = (0,1,0,0)).grid(in_=self.frame_bin_IR,row=3,column=0,columnspan=2*PDP8_WORD_SIZE,sticky='nsew')
 		
 		# Register Value Labels
+		# Last Executed Instruction Labels
+		self.lbl_PC_name = ttk.Label(self.frame_regs, text="PC:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=0,column=0, sticky='E')
+		self.lbl_PC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.PC_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=0,column=1,sticky='W')
+		self.lbl_LR_name = ttk.Label(self.frame_regs, text="LR:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=1, column=0, sticky='E')
+		self.lbl_LR_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.lbl_LR, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=1,sticky='W')
+		self.lbl_AC_name = ttk.Label(self.frame_regs, text="AC:", padding=(25,4,10,4)).grid(in_=self.frame_regs,row=1, column=2, sticky='E')
+		self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.AC_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
 	
 	def open_file(self):
 		file_name = askopenfilename()
