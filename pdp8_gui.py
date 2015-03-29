@@ -992,11 +992,11 @@ class PDP8_ISA(object):
 # GUI APP CLASS DEFINITIONS
 #----------------------------
 class App:
-	def __init__(self,root):
+	def __init__(self,root,debug,debug_v,SR_val):
 		self.root = root
 		self.root.title("PDP-8 ISA Simulator")
-		#master["padx"] = 5
-		#master["pady"] = 10
+		
+		self.PDP8 = PDP8_ISA(debug,debug_v,SR_val) # instantiate a PDP8 object
 		
 		# background colors for highlighting memory
 		self.color_last_instr="#ffb700"
@@ -1068,6 +1068,26 @@ class App:
 		self.frame_regs = tkinter.ttk.LabelFrame(self.sub_frame, text="Current Register Values", padding=(5, 5, 5, 5))
 		self.frame_regs.grid(column=0,row=2)
 		
+		# SR frame
+		self.lbl_SR_name = tkinter.ttk.Label(self.frame_SR, text="SR:").grid(in_=self.frame_SR,row=0,column=0,sticky=E, rowspan=2)
+		self.lbl_SR_val = tkinter.ttk.Label(self.frame_SR, text=u"%04o" % self.PDP8.SR, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
+		self.SR_chk_box = list()
+		self.SR_bin_val = list()
+		SR_bin_start = bin(self.PDP8.SR)
+		SR_bin_start = SR_bin_start[2:]	# trim leading '0b'
+		while len(SR_bin_start) < PDP8_WORD_SIZE:
+			SR_bin_start = '0'+SR_bin_start
+		tkinter.ttk.Label(self.frame_SR, padding=(25,2,5,2), text="Bit #:").grid(in_=self.frame_SR,row=0,column=2)
+		for i in range(12):
+			self.SR_bin_val.append(int(SR_bin_start[i]))
+			tkinter.ttk.Label(self.frame_SR, text=u"%s" % str(i), padding = (2,2,2,2), anchor='center').grid(in_=self.frame_SR,row=0,column=(i+3),sticky='w')
+			self.SR_chk_box.append(0)
+			self.SR_chk_box[i] = tkinter.ttk.Checkbutton(self.frame_SR,
+				command=self.changed_SR_val, variable=self.SR_bin_val[i],
+				onvalue=1, offvalue=0)
+			self.SR_chk_box[i].grid(in_=self.frame_SR,row=1,column=(i+3),sticky='ew')
+			
+		
 		# Last Executed Instruction Labels
 		self.lbl_prevPC_name = tkinter.ttk.Label(self.frame_last_instr, text="Previous PC:").grid(in_=self.frame_last_instr,row=0,column=0, sticky=E)
 		self.lbl_IR_name = tkinter.ttk.Label(self.frame_last_instr, text="IR:").grid(in_=self.frame_last_instr,row=1, column=0, sticky=E)
@@ -1092,6 +1112,9 @@ class App:
 	
 	def view_stats(self):
 		print ("View Statistics")
+		
+	def changed_SR_val(self):
+		print ("Update SR val")
 
 # END CLASS DEFINITION FOR GUI APP
 #==============================================================================
@@ -1125,20 +1148,20 @@ else:
 	
 # GUI Testing
 root = Tk()
-app = App(root)
+app = App(root,args.debug,args.debug_verbose,SR)
 root.mainloop()
 
-myPDP8 = PDP8_ISA(args.debug,args.debug_verbose,SR) # instantiate a PDP8 object
+
 # clear trace files and load the memory image
-myPDP8.init_tracefiles()
-myPDP8.load_memory(args.input_filename)
+app.PDP8.init_tracefiles()
+app.PDP8.load_memory(args.input_filename)
 halt = 0
-myPDP8.open_tracefiles()	# open trace files for append
+app.PDP8.open_tracefiles()	# open trace files for append
 # execute until a halt instruction is encountered
 while not halt:
-	halt = myPDP8.execute()	# execute next instruction
-myPDP8.close_tracefiles()	# close trace files
-myPDP8.print_statistics()	# print statistics
+	halt = app.PDP8.execute()	# execute next instruction
+app.PDP8.close_tracefiles()	# close trace files
+app.PDP8.print_statistics()	# print statistics
 
 # END OF PROGRAM
 #==============================================================================
