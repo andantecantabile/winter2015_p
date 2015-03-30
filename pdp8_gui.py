@@ -137,7 +137,8 @@ class PDP8_ISA(object):
 		self.flagHLT = False
 		# Create Memory Arrays
 		self.mem = list()	# initialize mem and memvalid lists
-		self.memvalid = list()
+		self.memvalid = list() 	# each entry is true/false indicating if valid
+		self.mem_valid_addrlist = list() # list of addresses that are currently valid
 		self.mem_breakpoint = list()
 		# flag used to indicate breakpoint after curr instruction
 		self.flag_breakpoint = False
@@ -352,20 +353,24 @@ class PDP8_ISA(object):
 	# Description: Takes input filename as parameter, and 
 	#   assigns values accordingly to the main memory array.
 	def load_memory(self,filename):
-		# set PC to the starting address
-		self.regs['PC'] = START_ADDR
-		# clear other registers
-		self.regs['AC'] = 0
+		# clear registers
+		for name in self.reg_names:
+			self.regs[name] = 0 
 		self.regs['LR'] = 0
-		self.regs['IR'] = 0
 		self.opcode = 0
 		self.opcode_str = 'NOP'
+		# set PC to the starting address
+		self.regs['PC'] = START_ADDR
+		
 		# Clear all locations referenced in memory by last instruction
 		for type in self.GUI_mem_highlight_types:
 			self.GUI_mem_ref[type] = -1
 		# Set default string for GUI_IR_bit_disp_type
 		self.GUI_IR_bit_disp_type='DEFAULT'
 		self.flag_breakpoint = False
+		
+		# clear the list of addresses that are currently valid
+		self.mem_valid_addrlist = list() 
 		
 		curr_addr = 0
 		# Set all valid bits to 0; initialize memory list to 0
@@ -406,6 +411,8 @@ class PDP8_ISA(object):
 				curr_data = int(curr_val)
 				self.memvalid[curr_addr] = 1
 				self.mem[curr_addr] = curr_data
+				# add the address to list of valid addresses 
+				self.mem_valid_addrlist.append(curr_addr)
 				# update StringVals for GUI 
 				for type in self.GUI_format_types:
 					self.GUI_mem_vals[curr_addr][type].set(self.format_str(curr_data,type))
@@ -414,6 +421,9 @@ class PDP8_ISA(object):
 			
 			# read next line
 			line_str = srcfile.readline()
+		
+		# sort the valid addrlist
+		self.mem_valid_addrlist.sort()
 		
 		# update StringVals for GUI
 		for reg in self.reg_names:
@@ -467,9 +477,17 @@ class PDP8_ISA(object):
 	def write_mem(self, address, value):
 		# write to trace file
 		self.tracefile.write("{0} {1:03x}\n".format(str(TRACE_TYPE['WRITE']),address))
+		
 		# update value in the memory array & set valid bit
 		self.mem[address] = value
-		self.memvalid[address] = 1
+		# if valid bit is not set, add it to the list of valid addresses 
+		# and set the valid bit 
+		if not(self.memvalid[address]):
+			self.memvalid[address] = 1
+			self.mem_valid_addrlist.append(address)
+			# sort the valid addrlist
+			self.mem_valid_addrlist.sort()
+			
 		# update the StringVals used by the GUI
 		for type in self.GUI_format_types:
 			self.GUI_mem_vals[address][type].set(self.format_str(value,type))
@@ -1198,10 +1216,6 @@ class App:
 		self.input_filename = ''
 		
 		self.PDP8 = PDP8_ISA(debug,debug_v,SR_val) # instantiate a PDP8 object
-		if input_filename != '':
-			# set filename and restart()
-			self.input_filename = input_filename
-			self.restart()
 			
 		self.view_format_type = 'oct'	# by default, display in octal
 		
@@ -1224,6 +1238,8 @@ class App:
 		s.configure('default.TLabel', background=self.mem_color_types['default'])
 		self.mem_color_styles['default'] = s
 		
+		#------------------------
+		# BUILD LAYOUT FOR GUI:
 		# Main frame
 		self.mainframe = ttk.Frame(self.root, padding=(5, 5, 10, 10))
 		self.mainframe.grid(sticky='nwse')
@@ -1249,18 +1265,21 @@ class App:
 							text="START/CONTINUE", style='Start.TButton',
 							command=self.execute)
 		self.btn_start.grid(in_=self.menubar,row=0,column=1)
+		self.btn_start['state']='disabled'
 		# Step button
 		s.configure('Step.TButton', foreground='DarkOrchid4')
 		self.btn_step = ttk.Button(self.menubar,
 							text="STEP/NEXT", style='Step.TButton',
 							command=self.execute_next)
 		self.btn_step.grid(in_=self.menubar,row=0,column=2)
+		self.btn_step['state']='disabled'
 		# Restart button
 		s.configure('Restart.TButton', foreground='dark goldenrod')
 		self.btn_restart = ttk.Button(self.menubar,
 							text="RESTART", style='Restart.TButton',
 							command=self.restart)
 		self.btn_restart.grid(in_=self.menubar,row=0,column=3)
+		self.btn_restart['state']='disabled'
 		# View Stats button
 		s.configure('Stats.TButton', foreground='indian red')
 		self.btn_stats = ttk.Button(self.menubar,
@@ -1432,6 +1451,16 @@ class App:
 		self.lbl_LR_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_LR_val, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=1,sticky='W')
 		self.lbl_AC_name = ttk.Label(self.frame_regs, text="AC:", padding=(25,4,10,4)).grid(in_=self.frame_regs,row=1, column=2, sticky='E')
 		self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['AC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
+		
+		# END LAYOUT FOR GUI
+		#---------------------
+		
+		# Check if a filename was given from command line, 
+		# if so, load memory image.
+		if input_filename != '':
+			# set filename and restart()
+			self.input_filename = input_filename
+			self.restart()
 
 	# End __init__()
 	#-------------------------------------
@@ -1453,57 +1482,60 @@ class App:
 		# loop through all memory values, and display and 
 		# link breakpoint button and label values for all
 		# valid entries
-		for i in range(MEM_SIZE):
-			if self.PDP8.memvalid[i]:
-				self.mem_row_items.append([])
-				
-				# check if current address = PC, if so, 
-				# display the arrow in first column 
-				if i == self.PDP8.regs['PC']:				
-					# Arrow item for indicating current PC
-					self.mem_row_items[curr_row].append(tk.Canvas(self.memtable,width=26,height=25))
-					self.mem_row_items[curr_row][0].grid(row=curr_row,column=0, sticky='ns')
-					self.mem_row_items[curr_row][0].create_polygon(0,11, 15,11, 
-						15,5, 25,14, 15,23, 15,18, 0,18,
-						fill='forest green')
-				else:	# otherwise, use empty label in first column
-					self.mem_row_items[curr_row].append(ttk.Label(self.memtable, text='', width=2, 
-						borderwidth="0").grid(row=curr_row, column=0))
-				# second column = checkbutton for breakpoint
-				# Note: no command specified, since only need the value updated
-				self.mem_row_items[curr_row].append(ttk.Checkbutton(self.memtable,
-					variable=self.PDP8.mem_breakpoint[i], onvalue=1, offvalue=0, padding=5))
-				self.mem_row_items[curr_row][1].grid(in_=self.memtable,row=curr_row,column=1,sticky='ew')
-				
-				# determine background color for the last two columns
-				style_name = 'default.TLabel'
-				#bgcolor = self.mem_color_types['default']
-				for type in self.PDP8.GUI_mem_highlight_types:
-					if i == self.PDP8.GUI_mem_ref[type]:
-						style_name=type+'.TLabel'
-						#bgcolor = self.mem_color_types['type']
-				
-				# third column = address label
-				addr_str = self.PDP8.format_str(i,self.view_format_type)
-				self.mem_row_items[curr_row].append(ttk.Label(self.memtable, 
-					text=u'%s' % addr_str, padding = (10,5,10,5), width=15,
-					style=style_name #, borderwidth="1", relief="solid"
-					).grid(row=curr_row, column=2,sticky='w'))
-				# fourth column = vertical separator
-				self.mem_row_items[curr_row].append(ttk.Frame(self.memtable,borderwidth=2, relief='flat'))
-				self.mem_row_items[curr_row][3].grid(in_=self.memtable, column=3, row=curr_row, sticky='ns')
-				# fourth column = value label
-				self.mem_row_items[curr_row].append(ttk.Label(self.memtable, width=15, 
-					padding = (10,5,10,5), style=style_name, 
-					textvariable=self.PDP8.GUI_mem_vals[i][self.view_format_type]).grid(row=curr_row, column=4,sticky='w'))
-				
-				curr_row = curr_row + 1 	# increment GUI table row number
+		#for i in range(MEM_SIZE):
+		#	if self.PDP8.memvalid[i]:
+		
+		# only need to loop through list of valid addresses
+		for i in self.PDP8.mem_valid_addrlist:
+			self.mem_row_items.append([])
+			
+			# check if current address = PC, if so, 
+			# display the arrow in first column 
+			if i == self.PDP8.regs['PC']:				
+				# Arrow item for indicating current PC
+				self.mem_row_items[curr_row].append(tk.Canvas(self.memtable,width=26,height=25))
+				self.mem_row_items[curr_row][0].grid(row=curr_row,column=0, sticky='ns')
+				self.mem_row_items[curr_row][0].create_polygon(0,11, 15,11, 
+					15,5, 25,14, 15,23, 15,18, 0,18,
+					fill='forest green')
+			else:	# otherwise, use empty label in first column
+				self.mem_row_items[curr_row].append(ttk.Label(self.memtable, text='', width=2, 
+					borderwidth="0").grid(row=curr_row, column=0))
+			# second column = checkbutton for breakpoint
+			# Note: no command specified, since only need the value updated
+			self.mem_row_items[curr_row].append(ttk.Checkbutton(self.memtable,
+				variable=self.PDP8.mem_breakpoint[i], onvalue=1, offvalue=0, padding=5))
+			self.mem_row_items[curr_row][1].grid(in_=self.memtable,row=curr_row,column=1,sticky='ew')
+			
+			# determine background color for the last two columns
+			style_name = 'default.TLabel'
+			#bgcolor = self.mem_color_types['default']
+			for type in self.PDP8.GUI_mem_highlight_types:
+				if i == self.PDP8.GUI_mem_ref[type]:
+					style_name=type+'.TLabel'
+					#bgcolor = self.mem_color_types['type']
+			
+			# third column = address label
+			addr_str = self.PDP8.format_str(i,self.view_format_type)
+			self.mem_row_items[curr_row].append(ttk.Label(self.memtable, 
+				text=u'%s' % addr_str, padding = (10,5,10,5), width=15,
+				style=style_name #, borderwidth="1", relief="solid"
+				).grid(row=curr_row, column=2,sticky='w'))
+			# fourth column = vertical separator
+			self.mem_row_items[curr_row].append(ttk.Frame(self.memtable,borderwidth=2, relief='flat'))
+			self.mem_row_items[curr_row][3].grid(in_=self.memtable, column=3, row=curr_row, sticky='ns')
+			# fourth column = value label
+			self.mem_row_items[curr_row].append(ttk.Label(self.memtable, width=15, 
+				padding = (10,5,10,5), style=style_name, 
+				textvariable=self.PDP8.GUI_mem_vals[i][self.view_format_type]).grid(row=curr_row, column=4,sticky='w'))
+			
+			curr_row = curr_row + 1 	# increment GUI table row number
 
-				# add separator line
-				self.mem_row_items.append([])
-				self.mem_row_items[curr_row].append(ttk.Frame(self.memtable,borderwidth=2, relief='flat'))
-				self.mem_row_items[curr_row][0].grid(in_=self.memtable, column=0, row=curr_row, columnspan=5, sticky='ew')
-				curr_row = curr_row + 1
+			# add separator line
+			self.mem_row_items.append([])
+			self.mem_row_items[curr_row].append(ttk.Frame(self.memtable,borderwidth=2, relief='flat'))
+			self.mem_row_items[curr_row][0].grid(in_=self.memtable, column=0, row=curr_row, columnspan=5, sticky='ew')
+			curr_row = curr_row + 1
 				
 	#-------------------------------------
 	# Function: open_file
@@ -1513,24 +1545,39 @@ class App:
 	#	and then attempt restart()
 	def open_file(self):
 		file_name = askopenfilename()
-		print (file_name)
 		if file_name != '':
+			self.clear_breakpoints()
+			# load memory
 			self.PDP8.load_memory(file_name)
+			# draw memory table
 			self.populateMemTable()
+	
+	#-------------------------------------
+	# Function: clear_breakpoints
+	# Description: Clears all active breakpoints
+	def clear_breakpoints(self):
+		# clear all breakpoints 
+		for i in range(MEM_SIZE):
+			self.PDP8.mem_breakpoint[i].set(0)
 	
 	#-------------------------------------
 	# Function: execute
 	# Description: Execute instructions, until 
 	#	a breakpoint or a HALT instruction is encountered
 	def execute(self):
-		print ("Execute instructions")
+		# enable restart button 
+		self.btn_restart['state']='normal'
+		# disable the SR register checkbuttons 
+		for i in range(PDP8_WORD_SIZE):
+			self.SR_chk_box[i].configure(state='disabled')
+			
 		self.PDP8.open_tracefiles()	# open trace files for append
 		flag_break = False
 		while not(flag_break):
 			flag_halt = self.PDP8.execute()
 			if self.PDP8.flag_breakpoint or flag_halt:
 				flag_break = True
-			print ("halt: ",flag_halt," break: ",flag_break)
+			#print ("halt: ",flag_halt," break: ",flag_break)
 		self.PDP8.close_tracefiles()	# close trace files
 		
 		# redraw memory table
@@ -1540,6 +1587,8 @@ class App:
 		# disable continue and step buttons, 
 		# and print statistics
 		if flag_halt:
+			self.btn_start['state']='disabled'
+			self.btn_step['state']='disabled'
 			self.PDP8.print_statistics()	# print statistics
 	
 	
@@ -1548,7 +1597,12 @@ class App:
 	# Description: Executes the next instruction, 
 	#	then stops
 	def execute_next(self):
-		print ("Execute next instruction")
+		# enable restart button 
+		self.btn_restart['state']='normal'
+		# disable the SR register checkbuttons 
+		for i in range(PDP8_WORD_SIZE):
+			self.SR_chk_box[i].configure(state='disabled')
+			
 		self.PDP8.open_tracefiles()	# open trace files for append
 		flag_halt = self.PDP8.execute()
 		self.PDP8.close_tracefiles()	# close trace files
@@ -1560,6 +1614,8 @@ class App:
 		# disable continue and step buttons, 
 		# and print statistics
 		if flag_halt:
+			self.btn_start['state']='disabled'
+			self.btn_step['state']='disabled'
 			self.PDP8.print_statistics()	# print statistics
 	
 	#-------------------------------------
@@ -1569,12 +1625,22 @@ class App:
 	#	necessary buttons. 
 	#	Note: Do NOT clear breakpoints on restart().
 	def restart(self):
-		print ("Restart")
 		# clear trace files and stats, and load the memory image
 		self.PDP8.init_tracefiles()
 		self.PDP8.clear_stats()
 		self.PDP8.load_memory(self.input_filename)
-
+		
+		# redraw memory table
+		self.populateMemTable()
+		
+		# enable start and step buttons 
+		self.btn_start['state']='normal'
+		self.btn_step['state']='normal'
+		# disable restart button 
+		self.btn_restart['state']='disabled'
+		# enable the SR register checkbuttons 
+		for i in range(PDP8_WORD_SIZE):
+			self.SR_chk_box[i].configure(state='normal')
 	
 	#-------------------------------------
 	# Function: view_stats
@@ -1595,7 +1661,7 @@ class App:
 				curr_SR = curr_SR + '1'
 		curr_SR_val = int(curr_SR,2)
 		# save it to PDP8 class
-		self.PDP8.SR = curr_SR_val
+		self.PDP8.regs['SR'] = curr_SR_val
 		# update GUI string vals
 		for type in self.PDP8.GUI_format_types:
 			self.PDP8.GUI_reg_vals['SR'][type].set(self.PDP8.format_str(curr_SR_val,type))
