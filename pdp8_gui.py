@@ -13,14 +13,21 @@
 ###			debug flag for micro instructions
 ###      4. -SR octal_value
 ###			Switch Register value
-### Edit 3/28/15: This GUI version has all parameters optional,
-###		since files may also be loaded via the "open file" button option.
-###		Switch register buttons are working/linked with switch register 
+### Edit 3/28/15: 
+###		- Layout of left-hand column is completed. Label 
+###		values in left-hand column are linked to PDP8 class values.
+###		- Switch register buttons are working/linked with switch register 
 ###		value in PDP8 class.
-### Edit 3/29/15: Completed functionality of all buttons except for 
-###		View Stats. (This could be done using a dialog window?)
-###		Also added radio buttons to allow for changing the display 
+###		- Buttons not yet functional. Right-hand column needs to be drawn.
+### Edit 3/29/15: 
+###		- Right-hand column completed: Scrolled memory canvas,
+###		color key for accessed memory, and display type radiobuttons complete.
+###		- Added radio buttons to allow for changing the display 
 ###		type of full size registers. (LR display is unchanged.)
+###		- Note also that this GUI version has all parameters optional,
+###		since files may also be loaded via the "open file" button option.
+###		- Completed functionality of all buttons except for 
+###		View Stats. (This could be done using a dialog window?)
 
 from math import log   	# needed for calculation of number of page bits
 import argparse			# needed parsing command line arguments
