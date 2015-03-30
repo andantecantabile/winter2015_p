@@ -1,5 +1,5 @@
 ### Title: PDP-8 Instruction Set Simulator
-### Last Update Date: March 29, 2015
+### Last Update Date: March 28, 2015
 ### Start Date: March 24th, 2015
 ### Author: Elizabeth Reed
 ### Comments: ECE 586 Project: Version 3 in Python!
@@ -7,8 +7,7 @@
 ###      1. input file (in output form for verilog's readmemh)
 ###      2. debug flag (1 = print debug statements; 0 = silent)
 ###      3. Switch Register value
-### Edit 3/28/15: This GUI version has all three parameters optional,
-###   since files may also be loaded via the "open file" button option.
+### Edit 3/24/15: This GUI version has all three parameters optional.
 
 from math import log   	# needed for calculation of number of page bits
 import argparse			# needed parsing command line arguments
@@ -37,12 +36,7 @@ ADDR_MEMORY_PAGE_BIT = int(4)
 # Calculated Constants
 MEM_SIZE = PDP8_WORDS_PER_PAGE * PDP8_PAGE_NUM
 PAGE_BITS = int(log(PDP8_PAGE_NUM, 2))
-PDP8_OCT_DIGITS = int(PDP8_WORD_SIZE / 3)
-if (PDP8_WORD_SIZE % 3) != 0:
-	PDP8_OCT_DIGITS = PDP8_OCT_DIGITS + 1
-PDP8_HEX_DIGITS = int(PDP8_WORD_SIZE / 4)
-if (PDP8_WORD_SIZE % 4) != 0:
-	PDP8_HEX_DIGITS = PDP8_HEX_DIGITS + 1
+PDP8_OCT_DIGITS = PDP8_WORD_SIZE / 3
 # Address Indices for page and offset
 ADDR_PAGE_LOW = int(0)
 ADDR_PAGE_HIGH = int(PAGE_BITS - 1)
@@ -96,8 +90,8 @@ EADDR_CYCLES = {
 # BIT POSITION LABELS FOR UI INSTRUCTIONS
 BIT_POS_LBL = {
 	'UI_GRP1': ['','','','','cla','cll','cma','cml','rar','ral','0/1','iac'],
-	'UI_GRP2_OR': ['','','','','cla','sma','sza','snl','0/1','osr','hlt',''],
-	'UI_GRP2_AND': ['','','','','cla','spa','sna','szl','0/1','osr','hlt',''],
+	'UI_GRP2_OR': ['','','','','cla','sma','sza','snl','0/1','osr','hlt'],
+	'UI_GRP2_AND': ['','','','','cla','spa','sna','szl','0/1','osr','hlt'],
 	'OTHER': ['','','','','','','','','','','','']
 }
 
@@ -123,81 +117,48 @@ class PDP8_ISA(object):
 		# and machine state, including effective address, 
 		# memory at effective address, and the address of 
 		# the currently executed instruction (prevPC)
-		# List of full size registers and values
-		self.reg_names = ['IR','PC','AC','SR','eaddr','mem_eaddr','prevPC']
-		self.regs = {
-			'IR': 0,		# Instruction (current/last executed)
-			'PC': 0,		# Program Counter
-			'AC': 0,		# Accumulator
-			'LR': 0,		# Link Register
-			'SR': SR,		# Switch Register
-			'eaddr': 0,		# effective address
-			'mem_eaddr': 0,	# value in memory @ eaddr
-			'prevPC': 0		# PC of the current(last executed) instruction
-		}
+		self.IR = 0		# Instruction (current/last executed)
+		self.PC = 0		# Program Counter
+		self.AC = 0		# Accumulator
+		self.LR = 0		# Link Register
+		self.SR = SR	# Switch Register
+		self.eaddr = 0		# effective address
+		self.mem_eaddr = 0	# value in memory @ eaddr
+		self.prevPC = 0		# PC of the current(last executed) instruction
 		self.flagHLT = False
-		# Create Memory Arrays
-		self.mem = list()	# initialize mem and memvalid lists
-		self.memvalid = list()
-		self.mem_breakpoint = list()
-		# Note that breakpoints need to be tk.IntVals, for 
-		# attaching to the tk.checkbuttons.
-		# Set all valid bits to 0; initialize memory list to 0
-		for i in range (0, MEM_SIZE - 1):
-			self.memvalid.append(0)
-			self.mem.append(0)
-			int_val = tk.IntVar()
-			self.mem_breakpoint.append(int_val)
-			self.mem_breakpoint[i].set(0)	# initialize as false
-		# GUI String Values for register values
-		self.GUI_reg_vals = {}
-		# List of allowed string format types
-		self.GUI_format_types = ['oct','hex','bin']
-		# Create zero value default strings
-		zero_str = {}
-		zero_str['oct'] = self.format_str(0,'oct')
-		zero_str['hex'] = self.format_str(0,'hex')
-		zero_str['bin'] = self.format_str(0,'bin')
-		# Create a tkStringVar for each valid format type
-		for name in self.reg_names:
-			self.GUI_reg_vals.update({name:{}})
-			for type in self.GUI_format_types:
-				str_var = tk.StringVar()
-				self.GUI_reg_vals[name].update({type:str_var})
-				self.GUI_reg_vals[name][type].set(zero_str[type])
-		# GUI String Values for Memory Values
-		self.GUI_mem_vals = {}
-		# Create a tk.StringVar for each valid format type
-		for i in range(MEM_SIZE):
-			self.GUI_mem_vals.update({i:{}})
-			#self.GUI_mem_vals[str(i)] = {}
-			for type in self.GUI_format_types:
-				str_var = tk.StringVar()
-				self.GUI_mem_vals[i].update({type:str_var})
-				#self.GUI_mem_vals[str(i)][type] = str_var
-				self.GUI_mem_vals[i][type].set(zero_str[type])
-		# Create tk.StringVar for special variables
-		# LR is one bit only
-		self.GUI_LR_val = tk.StringVar()
-		self.GUI_LR_val.set('0')
-		# Opcode is a string name
-		self.GUI_opcode_str = tk.StringVar()
-		self.GUI_opcode_str.set('NOP')
+		# GUI String Values
+		self.IR_oct_str = tk.StringVar()
+		self.IR_oct_str.set('0000')
+		self.PC_oct_str = tk.StringVar()
+		self.PC_oct_str.set('0000')
+		self.AC_oct_str = tk.StringVar()
+		self.AC_oct_str.set('0000')
+		self.SR_oct_str = tk.StringVar()
+		self.SR_oct_str.set('0000')
+		self.eaddr_oct_str = tk.StringVar()
+		self.eaddr_oct_str.set('0000')
+		self.mem_eaddr_oct_str = tk.StringVar()
+		self.mem_eaddr_oct_str.set('0000')
+		self.prevPC_oct_str = tk.StringVar()
+		self.prevPC_oct_str.set('0000')
+		# Additional Label strings for GUI
+		self.lbl_LR = tk.StringVar()
+		self.lbl_LR.set('0')
+		self.lbl_opcode_str = tk.StringVar()
+		self.lbl_opcode_str.set('NOP')
 		# IR binary digits
-		self.GUI_IR_bin_val = []
+		self.lbl_IR_bin = []
 		for i in range(PDP8_WORD_SIZE):
-			self.GUI_IR_bin_val.append(tk.StringVar())
-			self.GUI_IR_bin_val[i].set('0')
-		# corresponding bit position labels
-		self.GUI_IR_bit_disp_type = 'OTHER'
-		self.GUI_IR_bit_lbl = []
+			self.lbl_IR_bin.append(tk.StringVar())
+			self.lbl_IR_bin[i].set('0')
+		# bit position labels
+		self.bit_pos_display_type = 'OTHER'
+		self.lbl_IR_bit_lbl = []
 		for i in range(PDP8_WORD_SIZE):
-			self.GUI_IR_bit_lbl.append(tk.StringVar())
-			self.GUI_IR_bit_lbl[i].set('')
-		
+			self.lbl_IR_bit_lbl.append(tk.StringVar())
+			self.lbl_IR_bit_lbl[i].set('')
 		# locations last accessed in memory; used in GUI
-		self.GUI_mem_highlight_types = ['instr_fetch','eaddr_read','eaddr_write','mem_read','mem_write']
-		self.GUI_mem_ref = {
+		self.mem_ref = {
 			'eaddr_read': -1,
 			'eaddr_write': -1, 
 			'mem_read': -1,
@@ -294,60 +255,37 @@ class PDP8_ISA(object):
 	def close_tracefiles(self):
 		self.tracefile.close()
 		self.branchfile.close()
-	
-	#-----------------------------------
-	# Function: format_str
-	# Description: Takes two arguments, an integer
-	#	value and a string indicating the desired 
-	#	format of the string result. Returns a string
-	#	of the desired number format, with leading zeroes.
-	# Arguments:	1. integer value 
-	#				2. format type ('oct','hex', or 'bin')
-	def format_str(self,value,format_type):
-		ret_str = ''	# initialize return value
-		if format_type == 'oct':
-			ret_str = oct(value)[2:]	# trim leading '0o'
-			while len(ret_str) < PDP8_OCT_DIGITS:
-				ret_str = '0' + ret_str		# add leading zero digits
-		elif format_type == 'hex':
-			ret_str = hex(value)[2:]	# trim leading '0x'
-			while len(ret_str) < PDP8_HEX_DIGITS:
-				ret_str = '0' + ret_str
-		elif format_type == 'bin':
-			ret_str = bin(value)[2:]	# trim leading '0b'
-			while len(ret_str) < PDP8_WORD_SIZE:
-				ret_str = '0' + ret_str
-		# return string
-		return ret_str
 
 	#-----------------------------------
 	# Function: load_memory
 	# Description: Takes input filename as parameter, and 
 	#   assigns values accordingly to the main memory array.
 	def load_memory(self,filename):
+		self.mem = list()	# initialize mem and memvalid to empty lists
+		self.memvalid = list()
 		# set PC to the starting address
-		self.regs['PC'] = START_ADDR
+		self.PC = START_ADDR
 		# clear other registers
-		self.regs['AC'] = 0
-		self.regs['LR'] = 0
-		self.regs['IR'] = 0
+		self.AC = 0
+		self.LR = 0
+		self.IR = 0
 		curr_addr = 0
 		# Set all valid bits to 0; initialize memory list to 0
 		for i in range (0, MEM_SIZE - 1):
-			self.memvalid[i]=0
-			self.mem[i]=0
+			self.memvalid.append(0)
+			self.mem.append(0)
 		# read from file
 		srcfile = open(filename)
 		line_str = srcfile.readline()
 		# Set starting address to the first address given in the file
 		if line_str[0] == '@':
 			if line_str[1] !='0':
-				self.regs['PC'] = int(line_str[1:-1],16)
+				self.PC = int(line_str[1:-1],16)
 				# Note: Trim off the '\n'
 			elif line_str[2] != '0':
-				self.regs['PC'] = int(line_str[2:-1],16)
+				self.PC = int(line_str[2:-1],16)
 			else:
-				self.regs['PC'] = int(line_str[3],16)
+				self.PC = int(line_str[3],16)
 		
 		# read lines until end of file is encountered
 		while (line_str != '') and (line_str != '\n'):
@@ -415,9 +353,6 @@ class PDP8_ISA(object):
 		# update value in the memory array & set valid bit
 		self.mem[address] = value
 		self.memvalid[address] = 1
-		# update the StringVals used by the GUI
-		for type in self.GUI_format_types:
-			self.GUI_mem_vals[address][type].set(self.format_str(value,type))
 
 	#-------------------------------------
 	# Function: write_branch_trace
@@ -459,7 +394,7 @@ class PDP8_ISA(object):
 	def calc_eaddr(self):
 		# Convert IR to a binary string to check if specific
 		# flag bits are set.
-		IR_bin_str = bin(self.regs['IR'])
+		IR_bin_str = bin(self.IR)
 		IR_bin_str = IR_bin_str[2:]	# trim off leading '0b'
 		
 		while len(IR_bin_str) < PDP8_WORD_SIZE:
@@ -468,8 +403,8 @@ class PDP8_ISA(object):
 		offset_mask = (1 << ADDR_OFFSET_SIZE) - 1 
 		page_mask = ((1 << ADDR_PAGE_SIZE) - 1) << ADDR_OFFSET_SIZE
 		
-		current_page = self.regs['prevPC'] & page_mask 
-		current_offset = self.regs['IR'] & offset_mask
+		current_page = self.prevPC & page_mask 
+		current_offset = self.IR & offset_mask
 			
 		eff_addr = -1	# initialize return val to -1
 				
@@ -497,14 +432,14 @@ class PDP8_ISA(object):
 					indirect_addr_loc = current_offset
 					# Read memory at indirect_addr_loc
 					eff_addr = self.read_mem(indirect_addr_loc,'READ')
-					self.GUI_mem_ref['eaddr_read'] = indirect_addr_loc
+					self.mem_ref['eaddr_read'] = indirect_addr_loc
 				else:
 					# Current Page Addressing, so:
 					#    Effective Address <- C(Old_PC[0:4] + Offset)
 					indirect_addr_loc = current_page + current_offset
 					# Read memory at indirect_addr_loc
 					eff_addr = self.read_mem(indirect_addr_loc,'READ')
-					self.GUI_mem_ref['eaddr_read'] = indirect_addr_loc
+					self.mem_ref['eaddr_read'] = indirect_addr_loc
 				# Add cycles for use of Indirect Addressing
 				self.cycle_count['all'] = self.cycle_count['all'] + EADDR_CYCLES['Indirect']
 				self.cycle_count[self.opcode_str] = self.cycle_count[self.opcode_str]+EADDR_CYCLES['Indirect']
@@ -515,12 +450,12 @@ class PDP8_ISA(object):
 				indirect_addr_loc = current_offset
 				# Read memory at indirect_addr_loc
 				eff_addr = self.read_mem(indirect_addr_loc,'READ')
-				self.GUI_mem_ref['eaddr_read'] = indirect_addr_loc
+				self.mem_ref['eaddr_read'] = indirect_addr_loc
 				# Increment the value 
 				eff_addr = eff_addr + 1 
 				# Store the incremented value in memory
 				self.write_mem(indirect_addr_loc,eff_addr)
-				self.GUI_mem_ref['eaddr_write'] = indirect_addr_loc
+				self.mem_ref['eaddr_write'] = indirect_addr_loc
 				# Add cycles for use of AutoIndex Addressing
 				self.cycle_count['all'] = self.cycle_count['all'] + EADDR_CYCLES['AutoIndex']
 				self.cycle_count[self.opcode_str] = self.cycle_count[self.opcode_str]+EADDR_CYCLES['AutoIndex']
@@ -532,60 +467,60 @@ class PDP8_ISA(object):
 	# Description: Executes the AND operation.
 	def op_and(self):
 		# First read the value at eaddr
-		self.regs['mem_eaddr'] = self.read_mem(self.regs['eaddr'],'READ')
-		self.GUI_mem_ref['mem_read'] = self.regs['eaddr']
+		self.mem_eaddr = self.read_mem(self.eaddr,'READ')
+		self.mem_ref['mem_read'] = self.eaddr
 		# Calculate AC & mem_val
-		self.regs['AC'] = self.regs['AC'] & self.regs['mem_eaddr']
+		self.AC = self.AC & self.mem_eaddr
 		
 	#-------------------------------------	
 	# Function: op_tad
 	# Description: Executes the TAD operation.
 	def op_tad(self):
 		# First read the value at eaddr
-		self.mem_eaddr = self.read_mem(self.regs['eaddr'],'READ')
-		self.GUI_mem_ref['mem_read'] = self.regs['eaddr']
+		self.mem_eaddr = self.read_mem(self.eaddr,'READ')
+		self.mem_ref['mem_read'] = self.eaddr
 		# Add AC and mem_val
-		sum = self.regs['AC'] + self.mem_eaddr
+		sum = self.AC + self.mem_eaddr
 		# if there is overflow from the MSbit position,
 		# invert the LR 
 		if ( (sum >> PDP8_WORD_SIZE) != 0 ):
-			self.regs['LR'] = not(self.regs['LR'])  
+			self.LR = not(self.LR)  
 			# Note: Using logical NOT here, since LR is one bit only
 		# save the AC using mask
-		self.regs['AC'] = sum & self.word_mask 
+		self.AC = sum & self.word_mask 
 	
 	#-------------------------------------	
 	# Function: op_isz
 	# Description: Executes the ISZ operation.
 	def op_isz(self):
 		# First read the value at eaddr
-		self.regs['mem_eaddr'] = self.read_mem(self.regs['eaddr'],'READ')
-		self.GUI_mem_ref['mem_read'] = self.regs['eaddr']
+		self.mem_eaddr = self.read_mem(self.eaddr,'READ')
+		self.mem_ref['mem_read'] = self.eaddr
 		# Increment value by 1
-		self.regs['mem_eaddr'] = (self.regs['mem_eaddr'] + 1) & self.word_mask
+		self.mem_eaddr = (self.mem_eaddr + 1) & self.word_mask
 		# Write updated value to memory
-		self.write_mem(self.regs['eaddr'],self.regs['mem_eaddr'])
-		self.GUI_mem_ref['mem_write'] = self.regs['eaddr']
+		self.write_mem(self.eaddr,self.mem_eaddr)
+		self.mem_ref['mem_write'] = self.eaddr
 		# Check if the updated value is 0: if so, skip next instr
-		if self.regs['mem_eaddr'] == 0:
-			self.regs['PC'] = self.regs['PC'] + 1
+		if self.mem_eaddr == 0:
+			self.PC = self.PC + 1
 			# Write to branch trace file, providing current PC, opcode string,
 			# target address, branch type, and flag indicating branch taken/not taken
-			self.write_branch_trace(self.regs['prevPC'], self.opcode_str, 
-				self.regs['PC'], BRANCH_TYPE['CONDITIONAL'], True)
+			self.write_branch_trace(self.prevPC, self.opcode_str, 
+				self.PC, BRANCH_TYPE['CONDITIONAL'], True)
 		else:
-			self.write_branch_trace(self.regs['prevPC'], self.opcode_str, 
-				self.regs['PC'], BRANCH_TYPE['CONDITIONAL'], False)
+			self.write_branch_trace(self.prevPC, self.opcode_str, 
+				self.PC, BRANCH_TYPE['CONDITIONAL'], False)
 	
 	#-------------------------------------	
 	# Function: op_dca
 	# Description: Executes the DCA operation.
 	def op_dca(self):
 		# Write AC to memory
-		self.write_mem(self.regs['eaddr'],self.regs['AC'])
-		self.GUI_mem_ref['mem_write'] = self.regs['eaddr']
+		self.write_mem(self.eaddr,self.AC)
+		self.mem_ref['mem_write'] = self.eaddr
 		# Clear the AC
-		self.regs['AC'] = 0 
+		self.AC = 0 
 	
 	#-------------------------------------	
 	# Function: op_jms
@@ -594,25 +529,25 @@ class PDP8_ISA(object):
 		# Save the PC to the effective address location
 		# (Recall that PC was already incremented in step 1, 
 		#  so it is already pointing to the next instruction)
-		self.write_mem(self.regs['eaddr'],self.regs['PC'])
-		self.GUI_mem_ref['mem_write'] = self.regs['eaddr']
+		self.write_mem(self.eaddr,self.PC)
+		self.mem_ref['mem_write'] = self.eaddr
 		# Set the PC to (EffAddr + 1)
-		self.regs['PC'] = (self.regs['eaddr'] + 1) & self.word_mask 
+		self.PC = (self.eaddr + 1) & self.word_mask 
 		# Write to the branch trace file, providing current PC, opcode string,
 		# target address, branch type, and flag indicating branch taken/not taken
-		self.write_branch_trace(self.regs['prevPC'], self.opcode_str, 
-				self.regs['PC'], BRANCH_TYPE['UNCONDITIONAL'], True)
+		self.write_branch_trace(self.prevPC, self.opcode_str, 
+				self.PC, BRANCH_TYPE['UNCONDITIONAL'], True)
 	
 	#-------------------------------------	
 	# Function: op_jmp
 	# Description: Executes the JMP operation.
 	def op_jmp(self):
 		# Set PC to the effective address
-		self.regs['PC'] = self.regs['eaddr']
+		self.PC = self.eaddr
 		# Write to the branch trace file, providing current PC, opcode string,
 		# target address, branch type, and flag indicating branch taken/not taken
-		self.write_branch_trace(self.regs['prevPC'], self.opcode_str, 
-				self.regs['PC'], BRANCH_TYPE['UNCONDITIONAL'], True)
+		self.write_branch_trace(self.prevPC, self.opcode_str, 
+				self.PC, BRANCH_TYPE['UNCONDITIONAL'], True)
 	
 	#-------------------------------------	
 	# Function: op_io
@@ -626,7 +561,7 @@ class PDP8_ISA(object):
 	# Description: Executes the current microinstruction.
 	def op_ui(self):
 		# Convert IR to a binary string to test for setting of specific bit positions
-		IR_str = bin(self.regs['IR'])
+		IR_str = bin(self.IR)
 		IR_str = IR_str[2:]	# trim off leading '0b'
 		
 		while len(IR_str) < PDP8_WORD_SIZE:
@@ -643,7 +578,7 @@ class PDP8_ISA(object):
 		if self.debug_v:
 			print (" ")
 			print ("***************** UI MODULE DEBUG ******************")
-			print ("   Current Instr: {0:04o}".format(self.regs['IR']))
+			print ("   Current Instr: {0:04o}".format(self.IR))
 			print (" ")
 			print ("   0   1   2   3   4   5   6   7   8   9  10  11")
 			print (" +---+---+---+---+---+---+---+---+---+---+---+---+")
@@ -654,57 +589,57 @@ class PDP8_ISA(object):
 		
 		# Group 1 Microinstructions: Check if bit 3 is a 0
 		if IR_str[3] == '0':
-			self.GUI_IR_bit_disp_type = 'UI_GRP1'
+			self.bit_pos_display_type = 'UI_GRP1'
 			if self.debug_v:
 				print ("                  cla cll cma cml rar ral 0/1 iac")
 				print (" ")
 				print ("Group 1 Microinstructions:")
 			
 			# if bits IR[4:11] == 0, then the instruction is a NOP
-			if (((self.regs['IR'] << 4) & self.word_mask) == 0):
+			if (((self.IR << 4) & self.word_mask) == 0):
 				# NOP
 				print (" -- NOP")
 			else:
 				# Sequence 1: CLA/CLL
 				# Check if bits 4 and 5 were set
 				if IR_str[4] == '1':
-					self.regs['AC'] = 0
+					self.AC = 0
 					if self.debug_v:
 						print (" -- Clear Accumulator")
-						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
+						print ("                NEW AC: {0:04o}".format(self.AC))
 				
 				if IR_str[5] == '1':
-					self.regs['LR'] = 0
+					self.LR = 0
 					if self.debug_v:
 						print (" -- Clear Link Register")
-						print ("                NEW LR: {0:1o}".format(self.regs['LR']))
+						print ("                NEW LR: {0:1o}".format(self.LR))
 				
 				# Sequence 2: CMA/CML
 				# Check if bits 6 and 7 were set
 				if IR_str[6] == '1':
-					self.regs['AC'] = (~self.regs['AC']) & self.word_mask
+					self.AC = (~self.AC) & self.word_mask
 					if self.debug_v:
 						print (" -- Complement Accumulator")
-						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
+						print ("                NEW AC: {0:04o}".format(self.AC))
 				
 				if IR_str[7] == '1':
-					self.regs['LR'] = not(self.regs['LR'])	# use logical not here since LR is one bit only
+					self.LR = not(self.LR)	# use logical not here since LR is one bit only
 					if self.debug_v:
 						print (" -- Complement Link Register")
-						print ("                NEW LR: {0:1o}".format(self.regs['LR']))
+						print ("                NEW LR: {0:1o}".format(self.LR))
 				
 				# Sequence 3: IAC
 				# Check if bit 11 is set
 				if IR_str[11] == '1':
-					self.regs['AC'] = self.regs['AC'] + 1
-					if (self.regs['AC'] >> PDP8_WORD_SIZE) != 0: # Check for overflow
-						self.regs['LR'] = not(self.regs['LR'])	# invert LR bit
-					self.regs['AC'] = self.regs['AC'] & self.word_mask 	# mask upper bits of AC to word size
+					self.AC = self.AC + 1
+					if (self.AC >> PDP8_WORD_SIZE) != 0: # Check for overflow
+						self.LR = not(self.LR)	# invert LR bit
+					self.AC = self.AC & self.word_mask 	# mask upper bits of AC to word size
 					
 					if self.debug_v:
 						print (" -- Complement Accumulator")
-						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
-						print ("                NEW LR: {0:1o}".format(self.regs['LR']))
+						print ("                NEW AC: {0:04o}".format(self.AC))
+						print ("                NEW LR: {0:1o}".format(self.LR))
 				
 				# Sequence 4: RAR/RAL
 				# Check if bits 8 and 9 have been set simultaneously: if so, this
@@ -720,7 +655,7 @@ class PDP8_ISA(object):
 				if IR_str[8] == '1':
 					# Let tmp_val be set to the concatenation of LR and AC, 
 					# {LR,AC}
-					tmp_val = (self.regs['LR'] << PDP8_WORD_SIZE) + self.regs['AC']
+					tmp_val = (self.LR << PDP8_WORD_SIZE) + self.AC
 					
 					# Check if bit 10 is 0: If so, only need to rotate one bit position
 					if IR_str[10] == '1':
@@ -751,20 +686,20 @@ class PDP8_ISA(object):
 					# bit of tmp_rotate, and the AC should be set to all the 
 					# less significant bits of tmp_rotate.
 					# {LR, AC} = tmp_rotate
-					self.regs['LR'] = tmp_rotate >> PDP8_WORD_SIZE
-					self.regs['AC'] = tmp_rotate & word_mask
+					self.LR = tmp_rotate >> PDP8_WORD_SIZE
+					self.AC = tmp_rotate & word_mask
 					
 					# Debug Print
 					if self.debug_v:
-						print ("                NEW LR: {0:1o}".format(self.regs['LR']))
-						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
+						print ("                NEW LR: {0:1o}".format(self.LR))
+						print ("                NEW AC: {0:04o}".format(self.AC))
 				
 				# Rotate left
 				# Check if bit 9 is 1: RAL
 				if IR_str[9] == '1':
 					# Let tmp_val be set to the concatenation of LR and AC, 
 					# {LR,AC}
-					tmp_val = (self.regs['LR'] << PDP8_WORD_SIZE) + self.regs['AC']
+					tmp_val = (self.LR << PDP8_WORD_SIZE) + self.AC
 					
 					# Check if bit 10 is 0: If so, only need to rotate one bit position
 					if IR_str[10] == '1':
@@ -796,13 +731,13 @@ class PDP8_ISA(object):
 					# Next, the new value of LR should be the most significant
 					# bit of tmp_rotate, and the AC should be set to all the 
 					# less significant bits of tmp_rotate.
-					self.regs['LR'] = tmp_rotate >> PDP8_WORD_SIZE
-					self.regs['AC'] = tmp_rotate & word_mask
+					self.LR = tmp_rotate >> PDP8_WORD_SIZE
+					self.AC = tmp_rotate & word_mask
 					
 					# Debug Print
 					if self.debug_v:
-						print ("                NEW LR: {0:1o}".format(self.regs['LR']))
-						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
+						print ("                NEW LR: {0:1o}".format(self.LR))
+						print ("                NEW AC: {0:04o}".format(self.AC))
 
 		# Else, Bit 3 is 1, indicating either Group 2 or 3 Microinstructions
 		else:
@@ -810,7 +745,7 @@ class PDP8_ISA(object):
 			if IR_str[11] == '0':
 				# OR subgroup: Check if bit 8 is set to 0 
 				if IR_str[8] == '0':
-					self.GUI_IR_bit_disp_type = 'UI_GRP2_OR'
+					self.bit_pos_display_type = 'UI_GRP2_OR'
 					if self.debug_v:
 						print ("                  cla sma sza snl 0/1 osr hlt")
 						print (" ")
@@ -819,13 +754,13 @@ class PDP8_ISA(object):
 					# check if any of bits 5 through 7 were set, indicating
 					# that an OR skip condition was to be checked (this instruction
 					# should be flagged as a conditional branch instruction)
-					if ((self.regs['IR'] >> (PDP8_WORD_SIZE - 7-1)) & 7) != 0:
+					if ((self.IR >> (PDP8_WORD_SIZE - 7-1)) & 7) != 0:
 						curr_branch_type = BRANCH_TYPE['CONDITIONAL']
 					
 					# SMA - Skip on Minus Accumulator: check bit 5
 					if IR_str[5] == '1':
 						# if most significant bit of AC is 1, then skip
-						if (self.regs['AC'] >> (PDP8_WORD_SIZE - 1)) == 1:
+						if (self.AC >> (PDP8_WORD_SIZE - 1)) == 1:
 							curr_branch_taken = True
 							str_OR_success = str_OR_success + 'SMA '
 						str_skip_check = str_skip_check + 'SMA '
@@ -833,7 +768,7 @@ class PDP8_ISA(object):
 					# SZA - Skip on Zero Accumulator: check bit 6
 					if IR_str[6] == '1':
 						# if AC is 0, then skip
-						if self.regs['AC'] == 0:
+						if self.AC == 0:
 							curr_branch_taken = True
 							str_OR_success = str_OR_success + 'SZA '
 						str_skip_check = str_skip_check + 'SZA '
@@ -841,7 +776,7 @@ class PDP8_ISA(object):
 					# SNL - Skip on Nonzero Link: check bit 7
 					if IR_str[7] == '1':
 						# if LR is not 0, then skip
-						if self.regs['LR'] != 0:
+						if self.LR != 0:
 							curr_branch_taken = True
 							str_OR_success = str_OR_success + 'SNL '
 						str_skip_check = str_skip_check + 'SNL '
@@ -856,7 +791,7 @@ class PDP8_ISA(object):
 
 				# Else, AND subgroup (bit 8 = 1)
 				else:
-					self.GUI_IR_bit_disp_type = 'UI_GRP2_AND'
+					self.bit_pos_display_type = 'UI_GRP2_AND'
 					# debug print header
 					if self.debug_v:
 						print ("                  cla spa sna szl 0/1 osr hlt")
@@ -865,7 +800,7 @@ class PDP8_ISA(object):
 					
 					# check if bits [5:7] were all zero: Skip Always should be 
 					# flagged as an unconditional branch.
-					if ((self.regs['IR'] >> (PDP8_WORD_SIZE - 7-1)) & 7) == 0:
+					if ((self.IR >> (PDP8_WORD_SIZE - 7-1)) & 7) == 0:
 						curr_branch_type = BRANCH_TYPE['UNCONDITIONAL']
 						str_skip_check = 'None. (Unconditional branch)'
 					else:
@@ -881,7 +816,7 @@ class PDP8_ISA(object):
 					if IR_str[5] == '1':
 						# if most significant bit of AC is not 0, then 
 						# then AC is negative, and condition is not met
-						if (self.regs['AC'] >> (PDP8_WORD_SIZE - 1)) == 1:
+						if (self.AC >> (PDP8_WORD_SIZE - 1)) == 1:
 							curr_branch_taken = False
 							str_AND_fail = str_AND_fail + 'SPA '
 						str_skip_check = str_skip_check + 'SPA '
@@ -889,7 +824,7 @@ class PDP8_ISA(object):
 					# SNA - Skip on Nonzero Accumulator: check bit 6
 					if IR_str[6] == '1':
 						# if AC is 0, then condition was not met, so do not skip
-						if self.regs['AC'] == 0:
+						if self.AC == 0:
 							curr_branch_taken = False
 							str_AND_fail = str_AND_fail + 'SNA '
 						str_skip_check = str_skip_check + 'SNA '
@@ -898,7 +833,7 @@ class PDP8_ISA(object):
 					if IR_str[7] == '1':
 						# if LR is non-zero, then condition not satisfied,
 						# so do not skip
-						if self.regs['LR'] != 0:
+						if self.LR != 0:
 							curr_branch_taken = False
 							str_AND_fail = str_AND_fail + 'SZL '
 						str_skip_check = str_skip_check + 'SZL '
@@ -913,22 +848,22 @@ class PDP8_ISA(object):
 						
 				# CLA - Clear Accumulator: check if bit 4 is set
 				if IR_str[4] == '1':
-					self.regs['AC'] = 0
+					self.AC = 0
 					if self.debug_v:
 						print (" -- CLA - Clear Accumulator")
-						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
+						print ("                NEW AC: {0:04o}".format(self.AC))
 				
 				# OSR - Or Switch Register with Accumulator: check if bit 9 is set
 				if IR_str[9] == '1':
 					if self.debug_v:
 						print (" -- OSR - Or Switch Register with Accumulator")
-						print ("           Previous AC: {0:04o}".format(self.regs['AC']))
-						print ("           Previous SR: {0:04o}".format(self.regs['SR']))
+						print ("           Previous AC: {0:04o}".format(self.AC))
+						print ("           Previous SR: {0:04o}".format(self.SR))
 					
-					self.regs['AC'] = self.regs['AC'] | self.regs['SR']
+					self.AC = self.AC | self.SR
 					
 					if self.debug_v:
-						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
+						print ("                NEW AC: {0:04o}".format(self.AC))
 				
 				# HLT - HaLT: check if bit 10 is set
 				if IR_str[10] == '1':
@@ -941,19 +876,19 @@ class PDP8_ISA(object):
 					# Determine if a Group 2 branch was taken, 
 					# and if so, increment the PC
 					if curr_branch_taken:
-						self.regs['PC'] = self.regs['PC'] + 1
+						self.PC = self.PC + 1
 					
 					# Update Branch Statistics as needed
 					# Write to branch trace file, providing current PC, opcode string,
 					# target address, branch type, and flag indicating branch taken/not taken
-					self.write_branch_trace(self.regs['prevPC'], self.opcode_str, 
-						self.regs['PC'], curr_branch_type, curr_branch_taken)
+					self.write_branch_trace(self.prevPC, self.opcode_str, 
+						self.PC, curr_branch_type, curr_branch_taken)
 			
 			# Else, bit 11 is set to 1: Group 3 Microinstructions
 			else:
 				# These are not implemented, so should be noted as 
 				# illegal/unrecognized instructions
-				print ("WARNING: Group 3 MicroOp called at PC = [{0:04o}]. Group 3 MicroOps not enabled in simulation.".format(self.regs['PC']))
+				print ("WARNING: Group 3 MicroOp called at PC = [{0:04o}]. Group 3 MicroOps not enabled in simulation.".format(self.PC))
 		
 		# Set the flags for which branch condition tests were made
 		self.branch_tests = str_skip_check
@@ -965,7 +900,7 @@ class PDP8_ISA(object):
 	# Description: "Executes" a NOP.
 	def op_default(self):
 		# do nothing, print warning that illegal opcode was given
-		print ("WARNING: Invalid opcode encountered at PC: [{0:04o}]".format(self.regs['prevPC']))
+		print ("WARNING: Invalid opcode encountered at PC: [{0:04o}]".format(self.prevPC))
 
 	#-------------------------------------
 	# Function: execute
@@ -976,20 +911,22 @@ class PDP8_ISA(object):
 	#               1 -> HLT microinstruction was given.
 	def execute(self):
 		# STEP 0: Clear all locations referenced in memory by last instruction
-		for type in self.GUI_mem_highlight_types:
-			self.GUI_mem_ref[type] = -1
-		# Set default string for GUI_IR_bit_disp_type
-		self.GUI_IR_bit_disp_type='OTHER'
+		self.mem_ref['eaddr_read'] = -1
+		self.mem_ref['eaddr_write'] = -1
+		self.mem_ref['mem_read'] = -1
+		self.mem_ref['mem_write'] = -1
+		# Set default string for bit_pos_display_type
+		self.bit_pos_display_type='OTHER'
 		
 		# STEP 1: Fetch the current instruction, increment PC
-		self.regs['IR'] = self.read_mem(self.regs['PC'],'FETCH')
-		self.GUI_mem_ref['instr_fetch'] = self.regs['PC']	# save location of fetched instr
-		self.regs['prevPC'] = self.regs['PC'] 
-		self.regs['PC'] = self.regs['PC'] + 1
+		self.IR = self.read_mem(self.PC,'FETCH')
+		self.mem_ref['instr_fetch'] = self.PC	# save location of fetched instr
+		self.prevPC = self.PC 
+		self.PC = self.PC + 1
 
 		# STEP 2: Decode the current instruction
 		# determine the opcode
-		self.opcode = self.regs['IR'] >> (PDP8_WORD_SIZE - PDP8_OPCODE_SIZE)
+		self.opcode = self.IR >> (PDP8_WORD_SIZE - PDP8_OPCODE_SIZE)
 		self.opcode_str = OPCODE_NAME[self.opcode]
 		op_str = self.opcode_str 	# shorter name for easier use, read-only
 		
@@ -1000,13 +937,13 @@ class PDP8_ISA(object):
 		if self.debug:	# Print basic debug for instruction number, PC, IR
 			print (" ")
 			print ("================== INSTRUCTION #{0:-1d} : {1} ==================".format(self.instr_count['all'], self.opcode_str))
-			print ("             PC / IR: {0:04o} / {1:04o}".format(self.regs['prevPC'], self.regs['IR']))
+			print ("             PC / IR: {0:04o} / {1:04o}".format(self.prevPC, self.IR))
 		
 		# STEP 2b: Determine the Effective Address
 		if (self.opcode >= 0 and self.opcode < 6):
-			self.regs['eaddr'] = self.calc_eaddr()
+			self.eaddr = self.calc_eaddr()
 		else:
-			self.regs['eaddr'] = 0
+			self.eaddr = 0
 		
 		# STEP 3: Execute Current Instruction
 		self.opcode_exec.get(self.opcode,self.op_default)()
@@ -1018,26 +955,57 @@ class PDP8_ISA(object):
 		
 		# Print the basic debug values for register/memory values after instruction executes
 		if self.debug:
-			print ("             LR / AC: {0:1o} / {1:04o}".format(self.regs['LR'], self.regs['AC']))
-			print ("   EFFECTIVE ADDRESS: {0:04o}".format(self.regs['eaddr']))
-			print ("   VALUE @ EFF. ADDR: {0:04o}".format(self.mem[self.regs['eaddr']]))
+			print ("             LR / AC: {0:1o} / {1:04o}".format(self.LR, self.AC))
+			print ("   EFFECTIVE ADDRESS: {0:04o}".format(self.eaddr))
+			print ("   VALUE @ EFF. ADDR: {0:04o}".format(self.mem[self.eaddr]))
 		
 		# Update all string values for GUI display
-		# IR,PC,AC,SR,eaddr,mem_eaddr,prevPC:
-		for reg in self.reg_names:
-			for type in self.GUI_format_types:
-				self.GUI_reg_vals[reg][type].set(self.format_str(self.regs[reg],type))
+		# IR:
+		tmp_val = oct(self.IR)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.IR_oct_str.set(tmp_val)
 		# IR binary values:
-		tmp_val = self.format_str(self.regs['IR'],'bin')
+		tmp_val = bin(self.IR)[2:]
 		for i in range(PDP8_WORD_SIZE):
-			self.GUI_IR_bin_val[i].set(tmp_val[i])
+			self.lbl_IR_bin[i].set(tmp_val[i])
+		# PC:
+		tmp_val = oct(self.PC)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.PC_oct_str.set(tmp_val)
+		# AC:
+		tmp_val = oct(self.AC)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.AC_oct_str.set(tmp_val)
+		# SR:
+		tmp_val = oct(self.SR)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.SR_oct_str.set(tmp_val)
+		# eaddr:
+		tmp_val = oct(self.eaddr)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.eaddr_oct_str.set(tmp_val)
+		# mem[eaddr]:
+		tmp_val = oct(self.mem_eaddr)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.mem_eaddr_oct_str.set(tmp_val)
+		# prevPC:
+		tmp_val = oct(self.prevPC)[2:]
+		while len(tmp_val) < PDP8_OCT_DIGITS:
+			tmp_val = '0' + tmp_val		# add leading zero digits
+		self.prevPC_oct_str.set(tmp_val)
 		# LR:
-		self.GUI_LR_val.set(int(self.regs['LR']))
+		self.lbl_LR.set(int(self.LR))
 		# Opcode:
-		self.GUI_opcode_str.set(self.opcode_str)
+		self.lbl_opcode_str.set(self.opcode_str)
 		# Bit Position Labels:
 		for i in range(PDP8_WORD_SIZE):
-			self.GUI_IR_bit_lbl[i].set(BIT_POS_LBL[self.GUI_IR_bit_disp_type][i])
+			self.lbl_IR_bit_lbl[i].set(BIT_POS_LBL[self.bit_pos_display_type][i])
 		
 		# return the HALT flag
 		return self.flagHLT
@@ -1116,32 +1084,19 @@ class PDP8_ISA(object):
 # GUI APP CLASS DEFINITIONS
 #----------------------------
 class App:
-	def __init__(self,root,input_filename,debug,debug_v,SR_val):
+	def __init__(self,root,debug,debug_v,SR_val):
 		self.root = root
 		self.root.title("PDP-8 ISA Simulator")
 		
 		self.PDP8 = PDP8_ISA(debug,debug_v,SR_val) # instantiate a PDP8 object
-		if input_filename != '':
-			self.PDP8.load_memory(input_filename)
 		
 		# background colors for highlighting memory
-		self.mem_color_types = {
-			'instr_fetch': "#ffb700",
-			'eaddr_read': "#54b69a",
-			'eaddr_write': "#8171cc",
-			'mem_read': "#007785",
-			'mem_write': "#cc71a9",
-			'default': "d9d7e0"
-		}
-		# build styles
-		self.mem_color_styles = {}
-		for type in self.PDP8.GUI_mem_highlight_types:
-			s = ttk.Style()
-			s.configure(type+'.TLabel', background=self.mem_color_types[type])
-			self.mem_color_styles[type] = s
-		s = ttk.Style()
-		s.configure('default.TLabel', background=self.mem_color_types['default'])
-		self.mem_color_styles['default'] = s
+		self.color_last_instr="#ffb700"
+		self.color_eaddr_read="#54b69a"
+		self.color_eaddr_write="#8171cc"
+		self.color_read="#007785"
+		self.color_write="#cc71a9"
+		self.color_default_bg="d9d7e0"
 		
 		# Main frame
 		self.mainframe = ttk.Frame(self.root, padding=(5, 5, 10, 10))
@@ -1215,80 +1170,31 @@ class App:
 		ttk.Label(self.sep3b, text='').grid(in_=self.sep3b,row=0,column=0)
 		self.frame_regs = ttk.LabelFrame(self.sub_frame, text="Current Register Values", padding=(10, 10, 10, 10))
 		self.frame_regs.grid(column=0,row=4,sticky='ew')
-		
-		# column 1: Current Memory Image frame
-		self.memframe_main = ttk.LabelFrame(self.sub_frame, text="Current Memory Image", padding=(5,5,5,5))
-		self.memframe_main.grid(column=1,row=0,rowspan=5,sticky='nsew')
-		# memframe1 contains the column header frame
-		self.memframe1 = ttk.Frame(self.memframe_main)
-		self.memframe1.grid(column=0,row=0,sticky='nw')
-		# create the column headers
-		self.mem_header = ttk.Frame(self.memframe1)
-		self.mem_header.pack()
-		self.mem_header_col0 = ttk.Label(self.mem_header, text='Breakpoint', width=10, 
-			borderwidth="0").grid(row=0, column=0,sticky='w')
-		#self.mem_header_col1 = ttk.Label(self.mem_header, text='Breakpoint', width=5, 
-		#	borderwidth="0").grid(row=0, column=1,sticky='w')
-		self.mem_header_col2 = ttk.Label(self.mem_header, text="Address", width=15,
-			borderwidth="0").grid(row=0, column=1,sticky='w')
-		self.mem_header_col3 = ttk.Label(self.mem_header, text="Value", width=15).grid(row=0, column=2,sticky='w')
-		# memframe2 contains the scrollable canvas
-		self.memframe2 = ttk.Frame(self.memframe_main)
-		self.memframe2.grid(column=0,row=1,sticky='nw')
-		self.canvas = tk.Canvas(self.memframe2, borderwidth=0) # background="#ffffff"
-		self.memtable = ttk.Frame(self.canvas)
-		self.vsb = tk.Scrollbar(self.memframe2, orient="vertical", command=self.canvas.yview)
+		# column 1:
+		self.memframe1 = ttk.LabelFrame(self.sub_frame, text="Current Memory Image", padding=(5,5,5,5))
+		self.memframe1.grid(column=1,row=0,rowspan=5,sticky='nsew')
+		self.canvas = tk.Canvas(self.memframe1, borderwidth=0) # background="#ffffff"
+		self.memframe2 = ttk.Frame(self.canvas)
+		self.vsb = tk.Scrollbar(self.memframe1, orient="vertical", command=self.canvas.yview)
 		self.canvas.configure(yscrollcommand=self.vsb.set)
 		
 		self.vsb.pack(side="right", fill="y")
 		self.canvas.pack(side="left", fill="both", expand=True)
-		self.canvas.create_window((4,4), window=self.memtable, anchor="nw", 
-			tags="self.memtable")
+		self.canvas.create_window((4,4), window=self.memframe2, anchor="nw", 
+			tags="self.memframe2")
 		# resize scrollbar
-		self.memtable.bind("<Configure>", self.OnFrameConfigure)
+		self.memframe2.bind("<Configure>", self.OnFrameConfigure)
 		# build memory table
-		#self.memtable = ttk.Frame(self.memframe2)
-		#self.memtable.grid(column=0,row=0,sticky='nsew')
-		self.populateMemTable()
-		
-		# separator between scrollable canvas and color key table
-		self.memframe_sep = ttk.Frame(self.memframe_main,borderwidth=3, relief='flat')
-		self.memframe_sep.grid(in_=self.memframe_main, column=1, row=0, sticky='ns',rowspan=2)
-		self.memframe_sep_lbl = ttk.Label(self.memframe_sep,text="").grid(in_=self.memframe_sep,column=0,row=0,sticky='nsew')
-		
-		# memframe3 contains the color key for the memory image 
-		self.memframe3 = ttk.Frame(self.memframe_main)
-		self.memframe3.grid(column=2,row=0,rowspan=2,sticky='nw')
-		self.mem_colorkey_frame = ttk.LabelFrame(self.memframe3, text="Memory Color Key", padding=(5,5,5,5))
-		self.mem_colorkey_frame.grid(column=0,row=0,sticky='nw')
-		# build color table
-		self.mem_color_table_row1 = ttk.Label(self.mem_colorkey_frame, text="Instruction Fetch", padding = (10,5,10,5), 
-			style='instr_fetch.TLabel', anchor='center').grid(in_=self.mem_colorkey_frame,column=0,row=0,sticky='nsew')
-		self.mem_color_table_sep1 = ttk.Frame(self.mem_colorkey_frame,borderwidth=2, relief='flat')
-		self.mem_color_table_sep1.grid(in_=self.mem_colorkey_frame, column=0, row=1, sticky='ns')
-		self.mem_color_table_row2 = ttk.Label(self.mem_colorkey_frame, text="Addressing Mode Read", padding = (10,5,10,5), 
-			style='eaddr_read.TLabel', anchor='center').grid(in_=self.mem_colorkey_frame,column=0,row=2,sticky='nsew')
-		self.mem_color_table_sep2 = ttk.Frame(self.mem_colorkey_frame,borderwidth=2, relief='flat')
-		self.mem_color_table_sep2.grid(in_=self.mem_colorkey_frame, column=0, row=3, sticky='ns')
-		self.mem_color_table_row3 = ttk.Label(self.mem_colorkey_frame, text="Addressing Mode Write", padding = (10,5,10,5), 
-			style='eaddr_write.TLabel', anchor='center').grid(in_=self.mem_colorkey_frame,column=0,row=4,sticky='nsew')
-		self.mem_color_table_sep3 = ttk.Frame(self.mem_colorkey_frame,borderwidth=2, relief='flat')
-		self.mem_color_table_sep3.grid(in_=self.mem_colorkey_frame, column=0, row=5, sticky='ns')
-		self.mem_color_table_row4 = ttk.Label(self.mem_colorkey_frame, text="Memory Read", padding = (10,5,10,5), 
-			style='mem_read.TLabel', anchor='center').grid(in_=self.mem_colorkey_frame,column=0,row=6,sticky='nsew')
-		self.mem_color_table_sep4 = ttk.Frame(self.mem_colorkey_frame,borderwidth=2, relief='flat')
-		self.mem_color_table_sep4.grid(in_=self.mem_colorkey_frame, column=0, row=7, sticky='ns')
-		self.mem_color_table_row5 = ttk.Label(self.mem_colorkey_frame, text="Memory Write", padding = (10,5,10,5), 
-			style='mem_write.TLabel', anchor='center').grid(in_=self.mem_colorkey_frame,column=0,row=8,sticky='nsew')
-		self.mem_color_table_sep5 = ttk.Frame(self.mem_colorkey_frame,borderwidth=2, relief='flat')
-		self.mem_color_table_sep5.grid(in_=self.mem_colorkey_frame, column=0, row=9, sticky='ns')
+		self.memtable = ttk.Frame(self.memframe2)
+		self.memtable.grid(column=0,row=0,sticky='nsew')
+		self.populateMemTable()				
 		
 		# SR frame
 		self.lbl_SR_name = ttk.Label(self.frame_SR, text="SR:", padding=(2,2,2,5)).grid(in_=self.frame_SR,row=0,column=0,sticky='E', rowspan=2)
-		self.lbl_SR_val = ttk.Label(self.frame_SR, textvariable=self.PDP8.GUI_reg_vals['SR']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
+		self.lbl_SR_val = ttk.Label(self.frame_SR, textvariable=self.PDP8.SR_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
 		self.SR_chk_box = []
 		self.SR_bin_val = []
-		SR_bin_start = bin(self.PDP8.regs['SR'])
+		SR_bin_start = bin(self.PDP8.SR)
 		SR_bin_start = SR_bin_start[2:]	# trim leading '0b'
 		while len(SR_bin_start) < PDP8_WORD_SIZE:
 			SR_bin_start = '0'+SR_bin_start
@@ -1306,12 +1212,11 @@ class App:
 		
 		# Last Executed Instruction Labels
 		self.lbl_prevPC_name = ttk.Label(self.frame_last_instr, text="Previous PC:", padding=(2,4,10,4)).grid(in_=self.frame_last_instr,row=0,column=0, sticky='E')
-		self.lbl_prevPC_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['prevPC']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=0,column=1,sticky='W')
+		self.lbl_prevPC_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.prevPC_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=0,column=1,sticky='W')
 		self.lbl_IR_name = ttk.Label(self.frame_last_instr, text="IR:", padding=(2,4,10,4)).grid(in_=self.frame_last_instr,row=1, column=0, sticky='E')
-		self.lbl_IR_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['IR']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=1,sticky='W')
+		self.lbl_IR_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.IR_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=1,sticky='W')
 		self.lbl_opcode_name = ttk.Label(self.frame_last_instr, text="OPCODE:", padding=(25,2,10,2)).grid(in_=self.frame_last_instr,row=1, column=2, sticky='E')
-		self.lbl_opcode_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_opcode_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=3,sticky='W')
-		# Display table of binary bits for IR value
+		self.lbl_opcode_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.lbl_opcode_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=3,sticky='W')
 		self.frame_bin_IR = ttk.LabelFrame(self.frame_last_instr,text="IR Value Displayed in Binary Bits", padding=(5, 5, 5, 5))
 		self.frame_bin_IR.grid(row=2,column=0,columnspan=4,padx=3,pady=10)
 		self.IR_bin_lbl = []
@@ -1327,14 +1232,14 @@ class App:
 			self.separator1a.grid(in_=self.frame_bin_IR, column=2*i+1, row=0, sticky='ns')
 			#ttk.Label(self.frame_bin_IR, text='', padding = (1,0,0,0)).grid(in_=self.frame_bin_IR,row=0,column=2*i+1,sticky='nsew')
 			self.IR_bin_lbl.append(ttk.Label(self.frame_bin_IR,
-				textvariable=self.PDP8.GUI_IR_bin_val[i], padding = (10,5,10,5), style='BitVal.TLabel', 
+				textvariable=self.PDP8.lbl_IR_bin[i], padding = (10,5,10,5), style='BitVal.TLabel', 
 				anchor='center').grid(in_=self.frame_bin_IR,row=2,column=2*i,sticky='nsew'))
 			# vertical separator
 			self.separator1b = ttk.Frame(self.frame_bin_IR,borderwidth=2, relief='flat')
 			self.separator1b.grid(in_=self.frame_bin_IR, column=2*i+1, row=1, sticky='ns')
 			#ttk.Label(self.frame_bin_IR, text='', padding = (1,0,0,0)).grid(in_=self.frame_bin_IR,row=2,column=2*i+1,sticky='nsew')
 			self.IR_bin_lbl.append(ttk.Label(self.frame_bin_IR,
-				textvariable=self.PDP8.GUI_IR_bit_lbl[i], padding = (10,5,10,5), style='BitName.TLabel',
+				textvariable=self.PDP8.lbl_IR_bit_lbl[i], padding = (10,5,10,5), style='BitName.TLabel',
 				anchor='center').grid(in_=self.frame_bin_IR,row=4,column=2*i,sticky='nsew'))
 			# vertical separator
 			self.separator1c = ttk.Frame(self.frame_bin_IR,borderwidth=2, relief='flat')
@@ -1351,11 +1256,11 @@ class App:
 		# Register Value Labels
 		# Last Executed Instruction Labels
 		self.lbl_PC_name = ttk.Label(self.frame_regs, text="PC:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=0,column=0, sticky='E')
-		self.lbl_PC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['PC']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=0,column=1,sticky='W')
+		self.lbl_PC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.PC_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=0,column=1,sticky='W')
 		self.lbl_LR_name = ttk.Label(self.frame_regs, text="LR:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=1, column=0, sticky='E')
-		self.lbl_LR_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_LR_val, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=1,sticky='W')
+		self.lbl_LR_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.lbl_LR, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=1,sticky='W')
 		self.lbl_AC_name = ttk.Label(self.frame_regs, text="AC:", padding=(25,4,10,4)).grid(in_=self.frame_regs,row=1, column=2, sticky='E')
-		self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['AC']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
+		self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.AC_oct_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
 	
 	# This function redraws the memory table
 	def populateMemTable(self):
@@ -1363,10 +1268,7 @@ class App:
 		for child in self.memtable.winfo_children():
 			child.destroy()
 		
-		# each entry in this list is a list of widgets on 
-		# the current row in the memory table.
 		self.mem_row_items = []
-		
 		for i in range(100):
 			int_var = tk.IntVar()
 			self.mem_row_items.append([])
@@ -1396,8 +1298,6 @@ class App:
 	def open_file(self):
 		file_name = askopenfilename()
 		print (file_name)
-		self.PDP8.load_memory(file_name)
-		self.populateMemTable()
 	
 	def execute(self):
 		print ("Execute instructions")
@@ -1422,9 +1322,10 @@ class App:
 		curr_SR_val = int(curr_SR,2)
 		# save it to PDP8 class
 		self.PDP8.SR = curr_SR_val
-		# update GUI string vals
-		for type in self.PDP8.GUI_format_types:
-			self.PDP8.GUI_reg_vals['SR'][type].set(self.PDP8.format_str(curr_SR_val,type))
+		curr_SR_str = oct(curr_SR_val)[2:]
+		while len(curr_SR_str) < PDP8_OCT_DIGITS:
+			curr_SR_str = '0' + curr_SR_str		# add leading zero digits
+		self.PDP8.SR_oct_str.set(curr_SR_str)
 		# update label display
 		#self.lbl_SR_val.configure(text=u"%04o" % self.PDP8.SR)
 	
@@ -1464,7 +1365,7 @@ else:
 	
 # GUI Testing
 root = tk.Tk()
-app = App(root,args.input_filename,args.debug,args.debug_verbose,SR)
+app = App(root,args.debug,args.debug_verbose,SR)
 root.mainloop()
 
 
