@@ -98,7 +98,7 @@ BIT_POS_LBL = {
 	'UI_GRP1': ['','','','','cla','cll','cma','cml','rar','ral','0/1','iac'],
 	'UI_GRP2_OR': ['','','','','cla','sma','sza','snl','0/1','osr','hlt',''],
 	'UI_GRP2_AND': ['','','','','cla','spa','sna','szl','0/1','osr','hlt',''],
-	'OTHER': ['','','','','','','','','','','','']
+	'DEFAULT': ['','','','','','','','','','','','']
 }
 
 # END LIST OF CONSTANTS
@@ -114,8 +114,6 @@ class PDP8_ISA(object):
 		self.debug_v = debug_verbose # verbose debug display flag
 		self.tracefile = ''		# trace file object
 		self.branchfile = ''	# branch file object
-		self.mem = list()		# the main memory array
-		self.memvalid = list()	# corresponding valid bits
 		self.opcode_str = 'NOP'	# the string of the current opcode 
 		self.opcode = 0			# integer value of current opcode
 		self.word_mask = (1 << PDP8_WORD_SIZE) - 1
@@ -143,7 +141,7 @@ class PDP8_ISA(object):
 		# Note that breakpoints need to be tk.IntVals, for 
 		# attaching to the tk.checkbuttons.
 		# Set all valid bits to 0; initialize memory list to 0
-		for i in range (0, MEM_SIZE - 1):
+		for i in range (MEM_SIZE):
 			self.memvalid.append(0)
 			self.mem.append(0)
 			int_val = tk.IntVar()
@@ -189,7 +187,7 @@ class PDP8_ISA(object):
 			self.GUI_IR_bin_val.append(tk.StringVar())
 			self.GUI_IR_bin_val[i].set('0')
 		# corresponding bit position labels
-		self.GUI_IR_bit_disp_type = 'OTHER'
+		self.GUI_IR_bit_disp_type = 'DEFAULT'
 		self.GUI_IR_bit_lbl = []
 		for i in range(PDP8_WORD_SIZE):
 			self.GUI_IR_bit_lbl.append(tk.StringVar())
@@ -331,9 +329,11 @@ class PDP8_ISA(object):
 		self.regs['AC'] = 0
 		self.regs['LR'] = 0
 		self.regs['IR'] = 0
+		self.opcode = 0
+		self.opcode_str = 'NOP'
 		curr_addr = 0
 		# Set all valid bits to 0; initialize memory list to 0
-		for i in range (0, MEM_SIZE - 1):
+		for i in range (MEM_SIZE):
 			self.memvalid[i]=0
 			self.mem[i]=0
 		# read from file
@@ -370,17 +370,37 @@ class PDP8_ISA(object):
 				curr_data = int(curr_val)
 				self.memvalid[curr_addr] = 1
 				self.mem[curr_addr] = curr_data
+				# update StringVals for GUI 
+				for type in self.GUI_format_types:
+					self.GUI_mem_vals[curr_addr][type].set(self.format_str(curr_data,type))
 				# increment the current address
 				curr_addr = curr_addr + 1
 			
 			# read next line
 			line_str = srcfile.readline()
 		
+		# update StringVals for GUI
+		for reg in self.reg_names:
+			for type in self.GUI_format_types:
+				self.GUI_reg_vals[reg][type].set(self.format_str(self.regs[reg],type))
+		# IR binary values:
+		tmp_val = self.format_str(self.regs['IR'],'bin')
+		for i in range(PDP8_WORD_SIZE):
+			self.GUI_IR_bin_val[i].set(tmp_val[i])
+		# LR:
+		self.GUI_LR_val.set(int(self.regs['LR']))
+		# Opcode:
+		self.GUI_opcode_str.set(self.opcode_str)
+		# Bit Position Labels:
+		self.GUI_IR_bit_disp_type = 'DEFAULT'
+		for i in range(PDP8_WORD_SIZE):
+			self.GUI_IR_bit_lbl[i].set(BIT_POS_LBL[self.GUI_IR_bit_disp_type][i])
+		
 		# if debug is on, print out all valid memory values:
 		if self.debug:
 			print ("\n=====================================================")
 			print (" STARTING MEMORY:")
-			for i in range(0, MEM_SIZE - 1):
+			for i in range(MEM_SIZE):
 				if self.memvalid[i] == 1:
 					print ("Address: {0:04o}  Value: {1:04o}".format(i, self.mem[i]))
 			print ("=====================================================\n")
@@ -979,7 +999,7 @@ class PDP8_ISA(object):
 		for type in self.GUI_mem_highlight_types:
 			self.GUI_mem_ref[type] = -1
 		# Set default string for GUI_IR_bit_disp_type
-		self.GUI_IR_bit_disp_type='OTHER'
+		self.GUI_IR_bit_disp_type='DEFAULT'
 		
 		# STEP 1: Fetch the current instruction, increment PC
 		self.regs['IR'] = self.read_mem(self.regs['PC'],'FETCH')
@@ -1122,7 +1142,10 @@ class App:
 		
 		self.PDP8 = PDP8_ISA(debug,debug_v,SR_val) # instantiate a PDP8 object
 		if input_filename != '':
+			# restart() here
 			self.PDP8.load_memory(input_filename)
+			
+		self.view_format_type = 'oct'	# by default, display in octal
 		
 		# background colors for highlighting memory
 		self.mem_color_types = {
@@ -1227,8 +1250,6 @@ class App:
 		self.mem_header.pack()
 		self.mem_header_col0 = ttk.Label(self.mem_header, text='Breakpoint', width=10, 
 			borderwidth="0").grid(row=0, column=0,sticky='w')
-		#self.mem_header_col1 = ttk.Label(self.mem_header, text='Breakpoint', width=5, 
-		#	borderwidth="0").grid(row=0, column=1,sticky='w')
 		self.mem_header_col2 = ttk.Label(self.mem_header, text="Address", width=15,
 			borderwidth="0").grid(row=0, column=1,sticky='w')
 		self.mem_header_col3 = ttk.Label(self.mem_header, text="Value", width=15).grid(row=0, column=2,sticky='w')
@@ -1242,17 +1263,14 @@ class App:
 		
 		self.vsb.pack(side="right", fill="y")
 		self.canvas.pack(side="left", fill="both", expand=True)
-		self.canvas.create_window((4,4), window=self.memtable, anchor="nw", 
-			tags="self.memtable")
+		self.canvas.create_window((0,0), window=self.memtable, anchor="nw")
 		# resize scrollbar
 		self.memtable.bind("<Configure>", self.OnFrameConfigure)
 		# build memory table
-		#self.memtable = ttk.Frame(self.memframe2)
-		#self.memtable.grid(column=0,row=0,sticky='nsew')
 		self.populateMemTable()
 		
 		# separator between scrollable canvas and color key table
-		self.memframe_sep = ttk.Frame(self.memframe_main,borderwidth=3, relief='flat')
+		self.memframe_sep = ttk.Frame(self.memframe_main) # borderwidth=2, relief='flat'
 		self.memframe_sep.grid(in_=self.memframe_main, column=1, row=0, sticky='ns',rowspan=2)
 		self.memframe_sep_lbl = ttk.Label(self.memframe_sep,text="").grid(in_=self.memframe_sep,column=0,row=0,sticky='nsew')
 		
@@ -1356,8 +1374,14 @@ class App:
 		self.lbl_LR_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_LR_val, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=1,sticky='W')
 		self.lbl_AC_name = ttk.Label(self.frame_regs, text="AC:", padding=(25,4,10,4)).grid(in_=self.frame_regs,row=1, column=2, sticky='E')
 		self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['AC']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
+
+	# End __init__()
+	#-------------------------------------
+
 	
-	# This function redraws the memory table
+	#-------------------------------------
+	# Function: populateMemTable
+	# Description: This function redraws the memory table
 	def populateMemTable(self):
 		# first, delete any existing widgets in memtable
 		for child in self.memtable.winfo_children():
@@ -1366,51 +1390,93 @@ class App:
 		# each entry in this list is a list of widgets on 
 		# the current row in the memory table.
 		self.mem_row_items = []
+		curr_row = 0	# index for current row in GUI table
 		
-		for i in range(100):
-			int_var = tk.IntVar()
-			self.mem_row_items.append([])
-			# Arrow item for indicating current PC
-			if i == 5:
-				self.mem_row_items[i].append(tk.Canvas(self.memtable,width=26,height=25))
-				self.mem_row_items[i][0].grid(row=i,column=0, sticky='ns')
-				self.mem_row_items[i][0].create_polygon(0,11, 15,11, 
-					15,5, 25,14, 15,23, 15,18, 0,18,
-					fill='forest green')
-				#self.mem_row_items[i][0].create_polygon(0,30, 80,30, 
-				#	80,0, 125,45, 80,90, 80,60, 0,60,
-				#	outline='SpringGreen4',
-				#	fill='forest green')
-			else:
-				self.mem_row_items[i].append(ttk.Label(self.memtable, text='', width=2, 
-					borderwidth="0").grid(row=i, column=0))
-			self.mem_row_items[i].append(ttk.Checkbutton(self.memtable,
-				command=self.changed_SR_val, variable=int_var,
-				onvalue=1, offvalue=0, padding=5))
-			self.mem_row_items[i][1].grid(in_=self.memtable,row=i,column=1,sticky='ew')
-			self.mem_row_items[i].append(ttk.Label(self.memtable, text="%s" % i, width=3, borderwidth="1", 
-				relief="solid").grid(row=i, column=2))
-			t="this is the second column for row %s" %i
-			self.mem_row_items[i].append(ttk.Label(self.memtable, text=t).grid(row=i, column=3))
-	
+		# loop through all memory values, and display and 
+		# link breakpoint button and label values for all
+		# valid entries
+		for i in range(MEM_SIZE):
+			if self.PDP8.memvalid[i]:
+				self.mem_row_items.append([])
+				
+				# check if current address = PC, if so, 
+				# display the arrow in first column 
+				if i == self.PDP8.regs['PC']:				
+					# Arrow item for indicating current PC
+					self.mem_row_items[curr_row].append(tk.Canvas(self.memtable,width=26,height=25))
+					self.mem_row_items[curr_row][0].grid(row=curr_row,column=0, sticky='ns')
+					self.mem_row_items[curr_row][0].create_polygon(0,11, 15,11, 
+						15,5, 25,14, 15,23, 15,18, 0,18,
+						fill='forest green')
+				else:	# otherwise, use empty label in first column
+					self.mem_row_items[curr_row].append(ttk.Label(self.memtable, text='', width=2, 
+						borderwidth="0").grid(row=curr_row, column=0))
+				# second column = checkbutton for breakpoint
+				# Note: no command specified, since only need the value updated
+				self.mem_row_items[curr_row].append(ttk.Checkbutton(self.memtable,
+					variable=self.PDP8.mem_breakpoint[i], onvalue=1, offvalue=0, padding=5))
+				self.mem_row_items[curr_row][1].grid(in_=self.memtable,row=curr_row,column=1,sticky='ew')
+				# third column = address label
+				addr_str = self.PDP8.format_str(i,self.view_format_type)
+				self.mem_row_items[curr_row].append(ttk.Label(self.memtable, 
+					text=u'%s' % addr_str, width=15	#, borderwidth="1", relief="solid"
+					).grid(row=curr_row, column=2,sticky='w'))
+				# fourth column = value label
+				self.mem_row_items[curr_row].append(ttk.Label(self.memtable, width=15,
+					textvariable=self.PDP8.GUI_mem_vals[i]['oct']).grid(row=curr_row, column=3,sticky='w'))
+				
+				curr_row = curr_row + 1 	# increment GUI table row number
+
+				# add separator line
+				self.mem_row_items.append([])
+				self.mem_row_items[curr_row].append(ttk.Frame(self.memtable,borderwidth=2, relief='flat'))
+				self.mem_row_items[curr_row][0].grid(in_=self.memtable, column=0, row=curr_row, columnspan=4, sticky='ew')
+				curr_row = curr_row + 1
+				
+	#-------------------------------------
+	# Function: open_file
+	# Description: Opens the dialog window for file selection,
+	#	allows user to select file. 
+	#	If file_name is not empty, then clear all breakpoints
+	#	and then attempt restart()
 	def open_file(self):
 		file_name = askopenfilename()
 		print (file_name)
 		self.PDP8.load_memory(file_name)
 		self.populateMemTable()
 	
+	#-------------------------------------
+	# Function: execute
+	# Description: Execute instructions, until 
+	#	a breakpoint or a HALT instruction is encountered
 	def execute(self):
 		print ("Execute instructions")
 	
+	#-------------------------------------
+	# Function: execute_next
+	# Description: Executes the next instruction, 
+	#	then stops
 	def execute_next(self):
 		print ("Execute next instruction")
 	
+	#-------------------------------------
+	# Function: restart
+	# Description: Reloads memory image from 
+	#	currently selected file, and enables/disables
+	#	necessary buttons. 
+	#	Note: Do NOT clear breakpoints on restart().
 	def restart(self):
 		print ("Restart")
 	
+	#-------------------------------------
+	# Function: view_stats
+	# Description: Open dialog window to show current stats.
 	def view_stats(self):
 		print ("View Statistics")
-		
+	
+	#-------------------------------------
+	# Function: changed_SR_val
+	# Description: Updates the SR val when an SR checkbutton has been clicked.
 	def changed_SR_val(self):
 		# recalculate the current SR_val
 		curr_SR = ''
@@ -1428,7 +1494,9 @@ class App:
 		# update label display
 		#self.lbl_SR_val.configure(text=u"%04o" % self.PDP8.SR)
 	
-	# Used to reset the scroll area to match size of the inner frame
+	#-------------------------------------
+	# Function: print_statistics
+	# Description: Used to reset the scroll area to match size of the inner frame
 	def OnFrameConfigure(self, event):
 		self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
