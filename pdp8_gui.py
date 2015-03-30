@@ -43,6 +43,7 @@ if (PDP8_WORD_SIZE % 3) != 0:
 PDP8_HEX_DIGITS = int(PDP8_WORD_SIZE / 4)
 if (PDP8_WORD_SIZE % 4) != 0:
 	PDP8_HEX_DIGITS = PDP8_HEX_DIGITS + 1
+NUM_OPCODES = 2**PDP8_OPCODE_SIZE
 # Address Indices for page and offset
 ADDR_PAGE_LOW = int(0)
 ADDR_PAGE_HIGH = int(PAGE_BITS - 1)
@@ -138,6 +139,8 @@ class PDP8_ISA(object):
 		self.mem = list()	# initialize mem and memvalid lists
 		self.memvalid = list()
 		self.mem_breakpoint = list()
+		# flag used to indicate breakpoint after curr instruction
+		self.flag_breakpoint = False
 		# Note that breakpoints need to be tk.IntVals, for 
 		# attaching to the tk.checkbuttons.
 		# Set all valid bits to 0; initialize memory list to 0
@@ -196,11 +199,11 @@ class PDP8_ISA(object):
 		# locations last accessed in memory; used in GUI
 		self.GUI_mem_highlight_types = ['instr_fetch','eaddr_read','eaddr_write','mem_read','mem_write']
 		self.GUI_mem_ref = {
+			'instr_fetch': -1,
 			'eaddr_read': -1,
 			'eaddr_write': -1, 
 			'mem_read': -1,
-			'mem_write': -1,
-			'instr_fetch': -1
+			'mem_write': -1
 		}	
 
 		# Opcode function calls
@@ -318,6 +321,32 @@ class PDP8_ISA(object):
 		# return string
 		return ret_str
 
+	
+	#-----------------------------------
+	# Function: clear_stats
+	# Description: Clears all stat variables
+	def clear_stats(self):
+		# build a list of opcode categories
+		list_ops = []
+		for i in range(NUM_OPCODES):
+			list_ops.append(OPCODE_NAME[i])
+		list_ops.append('all')
+		# build list of branch types 
+		list_uncond_branch_types = ['all','JMS','JMP','UI']
+		list_cond_branch_types = ['all','ISZ','UI']
+
+		# clear instr_count and cycle_count
+		for name in list_ops:
+			self.instr_count[name] = 0 
+			self.cycle_count[name] = 0 
+		# clear branch counts
+		for name in list_uncond_branch_types:
+			self.branch_uncond_count[name] = 0
+		for name in list_cond_branch_types:
+			self.branch_cond_nt_count[name] = 0 
+			self.branch_cond_t_count[name] = 0
+
+	
 	#-----------------------------------
 	# Function: load_memory
 	# Description: Takes input filename as parameter, and 
@@ -331,6 +360,13 @@ class PDP8_ISA(object):
 		self.regs['IR'] = 0
 		self.opcode = 0
 		self.opcode_str = 'NOP'
+		# Clear all locations referenced in memory by last instruction
+		for type in self.GUI_mem_highlight_types:
+			self.GUI_mem_ref[type] = -1
+		# Set default string for GUI_IR_bit_disp_type
+		self.GUI_IR_bit_disp_type='DEFAULT'
+		self.flag_breakpoint = False
+		
 		curr_addr = 0
 		# Set all valid bits to 0; initialize memory list to 0
 		for i in range (MEM_SIZE):
@@ -392,7 +428,6 @@ class PDP8_ISA(object):
 		# Opcode:
 		self.GUI_opcode_str.set(self.opcode_str)
 		# Bit Position Labels:
-		self.GUI_IR_bit_disp_type = 'DEFAULT'
 		for i in range(PDP8_WORD_SIZE):
 			self.GUI_IR_bit_lbl[i].set(BIT_POS_LBL[self.GUI_IR_bit_disp_type][i])
 		
@@ -1000,6 +1035,8 @@ class PDP8_ISA(object):
 			self.GUI_mem_ref[type] = -1
 		# Set default string for GUI_IR_bit_disp_type
 		self.GUI_IR_bit_disp_type='DEFAULT'
+		# Initialize breakpoint flag as false 
+		self.flag_breakpoint = False
 		
 		# STEP 1: Fetch the current instruction, increment PC
 		self.regs['IR'] = self.read_mem(self.regs['PC'],'FETCH')
@@ -1058,6 +1095,25 @@ class PDP8_ISA(object):
 		# Bit Position Labels:
 		for i in range(PDP8_WORD_SIZE):
 			self.GUI_IR_bit_lbl[i].set(BIT_POS_LBL[self.GUI_IR_bit_disp_type][i])
+
+		# check if there was a breakpoint set on this instruction
+		# (if so, stop execution AFTER this instruction completes)
+		if self.mem_breakpoint[self.regs['PC']].get():
+			self.flag_breakpoint = True
+			if self.debug:
+				print ("-Breakpoint: Next PC flagged with breakpoint at {0:04o}".format(self.regs['PC'])) 
+		# check for any other breakpoints that might have been 
+		# touched on memory read/write accesses
+		else:
+			# exclude the 'instr_fetch' type
+			other_types = ['eaddr_read','eaddr_write','mem_read','mem_write']
+			for type in other_types:
+				if self.GUI_mem_ref[type] != -1:
+					# check if accessed memory has a breakpoint set 
+					if self.mem_breakpoint[self.GUI_mem_ref[type]].get():
+						self.flag_breakpoint = True
+						if self.debug:
+							print ("--Breakpoint type: {0} at address: {1:04o}".format(type,self.GUI_mem_ref[type]))
 		
 		# return the HALT flag
 		return self.flagHLT
@@ -1139,11 +1195,13 @@ class App:
 	def __init__(self,root,input_filename,debug,debug_v,SR_val):
 		self.root = root
 		self.root.title("PDP-8 ISA Simulator")
+		self.input_filename = ''
 		
 		self.PDP8 = PDP8_ISA(debug,debug_v,SR_val) # instantiate a PDP8 object
 		if input_filename != '':
-			# restart() here
-			self.PDP8.load_memory(input_filename)
+			# set filename and restart()
+			self.input_filename = input_filename
+			self.restart()
 			
 		self.view_format_type = 'oct'	# by default, display in octal
 		
@@ -1154,7 +1212,7 @@ class App:
 			'eaddr_write': "#8171cc",
 			'mem_read': "#007785",
 			'mem_write': "#cc71a9",
-			'default': "d9d7e0"
+			'default': "#d9d7e0"
 		}
 		# build styles
 		self.mem_color_styles = {}
@@ -1250,7 +1308,7 @@ class App:
 		self.mem_header.pack()
 		self.mem_header_col0 = ttk.Label(self.mem_header, text='Breakpoint', width=10, 
 			borderwidth="0").grid(row=0, column=0,sticky='w')
-		self.mem_header_col2 = ttk.Label(self.mem_header, text="Address", width=15,
+		self.mem_header_col2 = ttk.Label(self.mem_header, text="Address", width=19,
 			borderwidth="0").grid(row=0, column=1,sticky='w')
 		self.mem_header_col3 = ttk.Label(self.mem_header, text="Value", width=15).grid(row=0, column=2,sticky='w')
 		# memframe2 contains the scrollable canvas
@@ -1303,7 +1361,7 @@ class App:
 		
 		# SR frame
 		self.lbl_SR_name = ttk.Label(self.frame_SR, text="SR:", padding=(2,2,2,5)).grid(in_=self.frame_SR,row=0,column=0,sticky='E', rowspan=2)
-		self.lbl_SR_val = ttk.Label(self.frame_SR, textvariable=self.PDP8.GUI_reg_vals['SR']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
+		self.lbl_SR_val = ttk.Label(self.frame_SR, textvariable=self.PDP8.GUI_reg_vals['SR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
 		self.SR_chk_box = []
 		self.SR_bin_val = []
 		SR_bin_start = bin(self.PDP8.regs['SR'])
@@ -1324,9 +1382,9 @@ class App:
 		
 		# Last Executed Instruction Labels
 		self.lbl_prevPC_name = ttk.Label(self.frame_last_instr, text="Previous PC:", padding=(2,4,10,4)).grid(in_=self.frame_last_instr,row=0,column=0, sticky='E')
-		self.lbl_prevPC_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['prevPC']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=0,column=1,sticky='W')
+		self.lbl_prevPC_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['prevPC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=0,column=1,sticky='W')
 		self.lbl_IR_name = ttk.Label(self.frame_last_instr, text="IR:", padding=(2,4,10,4)).grid(in_=self.frame_last_instr,row=1, column=0, sticky='E')
-		self.lbl_IR_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['IR']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=1,sticky='W')
+		self.lbl_IR_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['IR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=1,sticky='W')
 		self.lbl_opcode_name = ttk.Label(self.frame_last_instr, text="OPCODE:", padding=(25,2,10,2)).grid(in_=self.frame_last_instr,row=1, column=2, sticky='E')
 		self.lbl_opcode_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_opcode_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=3,sticky='W')
 		# Display table of binary bits for IR value
@@ -1369,11 +1427,11 @@ class App:
 		# Register Value Labels
 		# Last Executed Instruction Labels
 		self.lbl_PC_name = ttk.Label(self.frame_regs, text="PC:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=0,column=0, sticky='E')
-		self.lbl_PC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['PC']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=0,column=1,sticky='W')
+		self.lbl_PC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['PC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=0,column=1,sticky='W')
 		self.lbl_LR_name = ttk.Label(self.frame_regs, text="LR:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=1, column=0, sticky='E')
 		self.lbl_LR_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_LR_val, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=1,sticky='W')
 		self.lbl_AC_name = ttk.Label(self.frame_regs, text="AC:", padding=(25,4,10,4)).grid(in_=self.frame_regs,row=1, column=2, sticky='E')
-		self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['AC']['oct'], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
+		self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['AC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
 
 	# End __init__()
 	#-------------------------------------
@@ -1416,21 +1474,35 @@ class App:
 				self.mem_row_items[curr_row].append(ttk.Checkbutton(self.memtable,
 					variable=self.PDP8.mem_breakpoint[i], onvalue=1, offvalue=0, padding=5))
 				self.mem_row_items[curr_row][1].grid(in_=self.memtable,row=curr_row,column=1,sticky='ew')
+				
+				# determine background color for the last two columns
+				style_name = 'default.TLabel'
+				#bgcolor = self.mem_color_types['default']
+				for type in self.PDP8.GUI_mem_highlight_types:
+					if i == self.PDP8.GUI_mem_ref[type]:
+						style_name=type+'.TLabel'
+						#bgcolor = self.mem_color_types['type']
+				
 				# third column = address label
 				addr_str = self.PDP8.format_str(i,self.view_format_type)
 				self.mem_row_items[curr_row].append(ttk.Label(self.memtable, 
-					text=u'%s' % addr_str, width=15	#, borderwidth="1", relief="solid"
+					text=u'%s' % addr_str, padding = (10,5,10,5), width=15,
+					style=style_name #, borderwidth="1", relief="solid"
 					).grid(row=curr_row, column=2,sticky='w'))
+				# fourth column = vertical separator
+				self.mem_row_items[curr_row].append(ttk.Frame(self.memtable,borderwidth=2, relief='flat'))
+				self.mem_row_items[curr_row][3].grid(in_=self.memtable, column=3, row=curr_row, sticky='ns')
 				# fourth column = value label
-				self.mem_row_items[curr_row].append(ttk.Label(self.memtable, width=15,
-					textvariable=self.PDP8.GUI_mem_vals[i]['oct']).grid(row=curr_row, column=3,sticky='w'))
+				self.mem_row_items[curr_row].append(ttk.Label(self.memtable, width=15, 
+					padding = (10,5,10,5), style=style_name, 
+					textvariable=self.PDP8.GUI_mem_vals[i][self.view_format_type]).grid(row=curr_row, column=4,sticky='w'))
 				
 				curr_row = curr_row + 1 	# increment GUI table row number
 
 				# add separator line
 				self.mem_row_items.append([])
 				self.mem_row_items[curr_row].append(ttk.Frame(self.memtable,borderwidth=2, relief='flat'))
-				self.mem_row_items[curr_row][0].grid(in_=self.memtable, column=0, row=curr_row, columnspan=4, sticky='ew')
+				self.mem_row_items[curr_row][0].grid(in_=self.memtable, column=0, row=curr_row, columnspan=5, sticky='ew')
 				curr_row = curr_row + 1
 				
 	#-------------------------------------
@@ -1442,8 +1514,9 @@ class App:
 	def open_file(self):
 		file_name = askopenfilename()
 		print (file_name)
-		self.PDP8.load_memory(file_name)
-		self.populateMemTable()
+		if file_name != '':
+			self.PDP8.load_memory(file_name)
+			self.populateMemTable()
 	
 	#-------------------------------------
 	# Function: execute
@@ -1451,6 +1524,24 @@ class App:
 	#	a breakpoint or a HALT instruction is encountered
 	def execute(self):
 		print ("Execute instructions")
+		self.PDP8.open_tracefiles()	# open trace files for append
+		flag_break = False
+		while not(flag_break):
+			flag_halt = self.PDP8.execute()
+			if self.PDP8.flag_breakpoint or flag_halt:
+				flag_break = True
+			print ("halt: ",flag_halt," break: ",flag_break)
+		self.PDP8.close_tracefiles()	# close trace files
+		
+		# redraw memory table
+		self.populateMemTable()
+		
+		# if halt instruction was given, 
+		# disable continue and step buttons, 
+		# and print statistics
+		if flag_halt:
+			self.PDP8.print_statistics()	# print statistics
+	
 	
 	#-------------------------------------
 	# Function: execute_next
@@ -1458,6 +1549,18 @@ class App:
 	#	then stops
 	def execute_next(self):
 		print ("Execute next instruction")
+		self.PDP8.open_tracefiles()	# open trace files for append
+		flag_halt = self.PDP8.execute()
+		self.PDP8.close_tracefiles()	# close trace files
+		
+		# redraw memory table
+		self.populateMemTable()
+		
+		# if halt instruction was given, 
+		# disable continue and step buttons, 
+		# and print statistics
+		if flag_halt:
+			self.PDP8.print_statistics()	# print statistics
 	
 	#-------------------------------------
 	# Function: restart
@@ -1467,6 +1570,11 @@ class App:
 	#	Note: Do NOT clear breakpoints on restart().
 	def restart(self):
 		print ("Restart")
+		# clear trace files and stats, and load the memory image
+		self.PDP8.init_tracefiles()
+		self.PDP8.clear_stats()
+		self.PDP8.load_memory(self.input_filename)
+
 	
 	#-------------------------------------
 	# Function: view_stats
@@ -1535,17 +1643,6 @@ root = tk.Tk()
 app = App(root,args.input_filename,args.debug,args.debug_verbose,SR)
 root.mainloop()
 
-
-# clear trace files and load the memory image
-app.PDP8.init_tracefiles()
-app.PDP8.load_memory(args.input_filename)
-halt = 0
-app.PDP8.open_tracefiles()	# open trace files for append
-# execute until a halt instruction is encountered
-while not halt:
-	halt = app.PDP8.execute()	# execute next instruction
-app.PDP8.close_tracefiles()	# close trace files
-app.PDP8.print_statistics()	# print statistics
 
 # END OF PROGRAM
 #==============================================================================
