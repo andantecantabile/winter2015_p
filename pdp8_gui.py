@@ -353,10 +353,9 @@ class PDP8_ISA(object):
 	# Description: Takes input filename as parameter, and 
 	#   assigns values accordingly to the main memory array.
 	def load_memory(self,filename):
-		# clear registers
-		for name in self.reg_names:
+		# clear registers (Note: do NOT clear SR)
+		for name in ['IR','PC','AC','eaddr','mem_eaddr','prevPC']:
 			self.regs[name] = 0 
-		self.regs['LR'] = 0
 		self.opcode = 0
 		self.opcode_str = 'NOP'
 		# set PC to the starting address
@@ -615,10 +614,10 @@ class PDP8_ISA(object):
 	# Description: Executes the TAD operation.
 	def op_tad(self):
 		# First read the value at eaddr
-		self.mem_eaddr = self.read_mem(self.regs['eaddr'],'READ')
+		self.regs['mem_eaddr'] = self.read_mem(self.regs['eaddr'],'READ')
 		self.GUI_mem_ref['mem_read'] = self.regs['eaddr']
 		# Add AC and mem_val
-		sum = self.regs['AC'] + self.mem_eaddr
+		sum = self.regs['AC'] + self.regs['mem_eaddr']
 		# if there is overflow from the MSbit position,
 		# invert the LR 
 		if ( (sum >> PDP8_WORD_SIZE) != 0 ):
@@ -657,6 +656,8 @@ class PDP8_ISA(object):
 		# Write AC to memory
 		self.write_mem(self.regs['eaddr'],self.regs['AC'])
 		self.GUI_mem_ref['mem_write'] = self.regs['eaddr']
+		# indicate the new value of mem[eaddr] (for GUI display)
+		self.regs['mem_eaddr'] = self.regs['AC']
 		# Clear the AC
 		self.regs['AC'] = 0 
 	
@@ -669,6 +670,8 @@ class PDP8_ISA(object):
 		#  so it is already pointing to the next instruction)
 		self.write_mem(self.regs['eaddr'],self.regs['PC'])
 		self.GUI_mem_ref['mem_write'] = self.regs['eaddr']
+		# indicate the new value of mem[eaddr] for GUI display
+		self.regs['mem_eaddr'] = self.regs['PC']
 		# Set the PC to (EffAddr + 1)
 		self.regs['PC'] = (self.regs['eaddr'] + 1) & self.word_mask 
 		# Write to the branch trace file, providing current PC, opcode string,
@@ -682,6 +685,8 @@ class PDP8_ISA(object):
 	def op_jmp(self):
 		# Set PC to the effective address
 		self.regs['PC'] = self.regs['eaddr']
+		# indicate memory at the effective address, even though it was not used 
+		self.regs['mem_eaddr'] = self.mem[self.regs['eaddr']]
 		# Write to the branch trace file, providing current PC, opcode string,
 		# target address, branch type, and flag indicating branch taken/not taken
 		self.write_branch_trace(self.regs['prevPC'], self.opcode_str, 
@@ -1055,6 +1060,7 @@ class PDP8_ISA(object):
 		self.GUI_IR_bit_disp_type='DEFAULT'
 		# Initialize breakpoint flag as false 
 		self.flag_breakpoint = False
+		self.flagHLT = False
 		
 		# STEP 1: Fetch the current instruction, increment PC
 		self.regs['IR'] = self.read_mem(self.regs['PC'],'FETCH')
@@ -1280,18 +1286,25 @@ class App:
 							command=self.restart)
 		self.btn_restart.grid(in_=self.menubar,row=0,column=3)
 		self.btn_restart['state']='disabled'
+		# Clear Breakpoints button
+		s.configure('ClearBreakpoints.TButton', foreground='OrangeRed3')
+		self.btn_clearbreakpoints = ttk.Button(self.menubar,
+							text="CLEAR BREAKPOINTS", style='ClearBreakpoints.TButton',
+							command=self.clear_breakpoints)
+		self.btn_clearbreakpoints.grid(in_=self.menubar,row=0,column=4)
+		#self.btn_clearbreakpoints['state']='disabled'
 		# View Stats button
 		s.configure('Stats.TButton', foreground='indian red')
 		self.btn_stats = ttk.Button(self.menubar,
 							text="VIEW STATS", style='Stats.TButton',
 							command=self.view_stats)
-		self.btn_stats.grid(in_=self.menubar,row=0,column=4)
+		self.btn_stats.grid(in_=self.menubar,row=0,column=5)
 		# Exit button
 		s.configure('Exit.TButton', foreground='firebrick4')
 		self.btn_exit = ttk.Button(self.menubar,
 							text="EXIT", style='Exit.TButton',
 							command=self.root.quit)
-		self.btn_exit.grid(in_=self.menubar,row=0,column=5)
+		self.btn_exit.grid(in_=self.menubar,row=0,column=6)
 		
 		# Separator between menubar and main part of window
 		self.separator = ttk.Frame(self.mainframe, borderwidth=2, relief='sunken')
@@ -1324,7 +1337,7 @@ class App:
 		self.memframe1.grid(column=0,row=0,sticky='nw')
 		# create the column headers
 		self.mem_header = ttk.Frame(self.memframe1)
-		self.mem_header.pack()
+		self.mem_header.pack() #expand=True
 		self.mem_header_col0 = ttk.Label(self.mem_header, text='Breakpoint', width=10, 
 			borderwidth="0").grid(row=0, column=0,sticky='w')
 		self.mem_header_col2 = ttk.Label(self.mem_header, text="Address", width=19,
@@ -1338,8 +1351,8 @@ class App:
 		self.vsb = tk.Scrollbar(self.memframe2, orient="vertical", command=self.canvas.yview)
 		self.canvas.configure(yscrollcommand=self.vsb.set)
 		
-		self.vsb.pack(side="right", fill="y")
-		self.canvas.pack(side="left", fill="both", expand=True)
+		self.canvas.pack(side="left", fill='y') #fill="both", expand=True
+		self.vsb.pack(side="right", fill='y')
 		self.canvas.create_window((0,0), window=self.memtable, anchor="nw")
 		# resize scrollbar
 		self.memtable.bind("<Configure>", self.OnFrameConfigure)
@@ -1354,8 +1367,28 @@ class App:
 		# memframe3 contains the color key for the memory image 
 		self.memframe3 = ttk.Frame(self.memframe_main)
 		self.memframe3.grid(column=2,row=0,rowspan=2,sticky='nw')
+		# row 0: radio button options for view format type 
+		self.mem_disp_type_frame = ttk.LabelFrame(self.memframe3, text="Value Display Format", padding=(5,5,5,5))
+		self.mem_disp_type_frame.grid(column=0,row=0,sticky='nw')
+		self.strVar_DispType = tk.StringVar()
+		self.strVar_DispType.set('oct')	# default format is octal
+		types = [
+			('Octal', 'oct'),
+			('Hexadecimal', 'hex'),
+			('Binary', 'bin')
+		]
+		for text, mode in types:
+			radio_btn = tk.Radiobutton(self.mem_disp_type_frame, text=text,
+				variable=self.strVar_DispType, value = mode,
+				command=self.changed_disp_val_format)
+			radio_btn.pack(anchor='w')
+		# row 1: space
+		self.mem_sep1 = ttk.Frame(self.memframe3) # borderwidth=2, relief='flat'
+		self.mem_sep1.grid(in_=self.memframe3, column=0, row=1, sticky='ew')
+		self.mem_sep1_lbl = ttk.Label(self.mem_sep1,text="").grid(in_=self.mem_sep1,column=0,row=0,sticky='nsew')
+		# row 2: color key
 		self.mem_colorkey_frame = ttk.LabelFrame(self.memframe3, text="Memory Color Key", padding=(5,5,5,5))
-		self.mem_colorkey_frame.grid(column=0,row=0,sticky='nw')
+		self.mem_colorkey_frame.grid(column=0,row=2,sticky='nw')
 		# build color table
 		self.mem_color_table_row1 = ttk.Label(self.mem_colorkey_frame, text="Instruction Fetch", padding = (10,5,10,5), 
 			style='instr_fetch.TLabel', anchor='center').grid(in_=self.mem_colorkey_frame,column=0,row=0,sticky='nsew')
@@ -1404,8 +1437,10 @@ class App:
 		self.lbl_prevPC_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['prevPC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=0,column=1,sticky='W')
 		self.lbl_IR_name = ttk.Label(self.frame_last_instr, text="IR:", padding=(2,4,10,4)).grid(in_=self.frame_last_instr,row=1, column=0, sticky='E')
 		self.lbl_IR_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['IR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=1,sticky='W')
-		self.lbl_opcode_name = ttk.Label(self.frame_last_instr, text="OPCODE:", padding=(25,2,10,2)).grid(in_=self.frame_last_instr,row=1, column=2, sticky='E')
-		self.lbl_opcode_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_opcode_str, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=3,sticky='W')
+		self.lbl_opcode_name = ttk.Label(self.frame_last_instr, text="OPCODE:", 
+			padding=(25,2,10,2)).grid(in_=self.frame_last_instr,row=1, column=2, sticky='E')
+		self.lbl_opcode_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_opcode_str, 
+			width = 5, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=3,sticky='W')
 		# Display table of binary bits for IR value
 		self.frame_bin_IR = ttk.LabelFrame(self.frame_last_instr,text="IR Value Displayed in Binary Bits", padding=(5, 5, 5, 5))
 		self.frame_bin_IR.grid(row=2,column=0,columnspan=4,padx=3,pady=10)
@@ -1416,7 +1451,9 @@ class App:
 		s.configure('BitVal.TLabel', background='azure3')
 		s.configure('BitName.TLabel', background='LightSteelBlue3')
 		for i in range(PDP8_WORD_SIZE):
-			ttk.Label(self.frame_bin_IR, text=u"%s" % str(i), padding = (10,5,10,5), style='BitNum.TLabel', anchor='center').grid(in_=self.frame_bin_IR,row=0,column=2*i,sticky='nsew')
+			ttk.Label(self.frame_bin_IR, text=u"%s" % str(i),
+				padding = (10,5,10,5), style='BitNum.TLabel', 
+				anchor='center').grid(in_=self.frame_bin_IR,row=0,column=2*i,sticky='nsew')
 			# vertical separator
 			self.separator1a = ttk.Frame(self.frame_bin_IR,borderwidth=2, relief='flat')
 			self.separator1a.grid(in_=self.frame_bin_IR, column=2*i+1, row=0, sticky='ns')
@@ -1428,7 +1465,7 @@ class App:
 			self.separator1b = ttk.Frame(self.frame_bin_IR,borderwidth=2, relief='flat')
 			self.separator1b.grid(in_=self.frame_bin_IR, column=2*i+1, row=1, sticky='ns')
 			#ttk.Label(self.frame_bin_IR, text='', padding = (1,0,0,0)).grid(in_=self.frame_bin_IR,row=2,column=2*i+1,sticky='nsew')
-			self.IR_bin_lbl.append(ttk.Label(self.frame_bin_IR,
+			self.IR_bin_lbl.append(ttk.Label(self.frame_bin_IR, width = 4,	# FIXED WIDTH SET HERE
 				textvariable=self.PDP8.GUI_IR_bit_lbl[i], padding = (10,5,10,5), style='BitName.TLabel',
 				anchor='center').grid(in_=self.frame_bin_IR,row=4,column=2*i,sticky='nsew'))
 			# vertical separator
@@ -1445,12 +1482,19 @@ class App:
 		
 		# Register Value Labels
 		# Last Executed Instruction Labels
+		# row 0
 		self.lbl_PC_name = ttk.Label(self.frame_regs, text="PC:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=0,column=0, sticky='E')
 		self.lbl_PC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['PC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=0,column=1,sticky='W')
+		# row 1
 		self.lbl_LR_name = ttk.Label(self.frame_regs, text="LR:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=1, column=0, sticky='E')
 		self.lbl_LR_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_LR_val, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=1,sticky='W')
 		self.lbl_AC_name = ttk.Label(self.frame_regs, text="AC:", padding=(25,4,10,4)).grid(in_=self.frame_regs,row=1, column=2, sticky='E')
 		self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['AC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
+		# row 2
+		self.lbl_eaddr_name = ttk.Label(self.frame_regs, text="Effective Addr:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=2, column=0, sticky='E')
+		self.lbl_eaddr_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['eaddr'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=2,column=1,sticky='W')
+		self.lbl_mem_eaddr_name = ttk.Label(self.frame_regs, text="Mem[EAddr]:", padding=(25,4,10,4)).grid(in_=self.frame_regs,row=2, column=2, sticky='E')
+		self.lbl_mem_eaddr_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['mem_eaddr'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=2,column=3,sticky='W')
 		
 		# END LAYOUT FOR GUI
 		#---------------------
@@ -1541,16 +1585,15 @@ class App:
 	# Function: open_file
 	# Description: Opens the dialog window for file selection,
 	#	allows user to select file. 
-	#	If file_name is not empty, then clear all breakpoints
-	#	and then attempt restart()
+	#	If file_name is not empty, then save file name,
+	#	clear all breakpoints and then attempt restart()
 	def open_file(self):
 		file_name = askopenfilename()
 		if file_name != '':
+			self.input_filename = file_name
 			self.clear_breakpoints()
-			# load memory
-			self.PDP8.load_memory(file_name)
-			# draw memory table
-			self.populateMemTable()
+			# restart
+			self.restart()
 	
 	#-------------------------------------
 	# Function: clear_breakpoints
@@ -1647,6 +1690,19 @@ class App:
 	# Description: Open dialog window to show current stats.
 	def view_stats(self):
 		print ("View Statistics")
+		
+	#-------------------------------------
+	# Function: changed_disp_val_format
+	# Description: Change the display type of all 
+	#	full size registers and memory values
+	def changed_disp_val_format(self):
+		self.lbl_SR_val
+		self.lbl_IR_val
+		self.lbl_prevPC_val
+		self.lbl_PC_val
+		self.lbl_AC_val
+		self.lbl_eaddr_val
+		self.lbl_mem_eaddr_val
 	
 	#-------------------------------------
 	# Function: changed_SR_val
