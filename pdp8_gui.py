@@ -3,12 +3,24 @@
 ### Start Date: March 24th, 2015
 ### Author: Elizabeth Reed
 ### Comments: ECE 586 Project: Version 3 in Python!
-###   Takes three command line parameters:
-###      1. input file (in output form for verilog's readmemh)
-###      2. debug flag (1 = print debug statements; 0 = silent)
-###      3. Switch Register value
-### Edit 3/28/15: This GUI version has all three parameters optional,
-###   since files may also be loaded via the "open file" button option.
+###			  Now with GUI!
+###   Takes four optional command line parameters:
+###      1. -i filename
+###			input file (in output form for verilog's readmemh)
+###      2. -d 
+###			debug flag (1 = print debug statements; 0 = silent)
+###	     3. -u
+###			debug flag for micro instructions
+###      4. -SR octal_value
+###			Switch Register value
+### Edit 3/28/15: This GUI version has all parameters optional,
+###		since files may also be loaded via the "open file" button option.
+###		Switch register buttons are working/linked with switch register 
+###		value in PDP8 class.
+### Edit 3/29/15: Completed functionality of all buttons except for 
+###		View Stats. (This could be done using a dialog window?)
+###		Also added radio buttons to allow for changing the display 
+###		type of full size registers. (LR display is unchanged.)
 
 from math import log   	# needed for calculation of number of page bits
 import argparse			# needed parsing command line arguments
@@ -110,9 +122,9 @@ BIT_POS_LBL = {
 # PDP8_ISA CLASS DEFINITION
 #----------------------------
 class PDP8_ISA(object):
-	def __init__(self,debug,debug_verbose,SR):
+	def __init__(self,debug,debug_ui,SR):
 		self.debug = debug		# debug display flag
-		self.debug_v = debug_verbose # verbose debug display flag
+		self.debug_ui = debug_ui # verbose debug display flag
 		self.tracefile = ''		# trace file object
 		self.branchfile = ''	# branch file object
 		self.opcode_str = 'NOP'	# the string of the current opcode 
@@ -718,7 +730,7 @@ class PDP8_ISA(object):
 		str_skip_check = ''
 		
 		# Verbose Debug Print for UI Instructions
-		if self.debug_v:
+		if self.debug_ui:
 			print (" ")
 			print ("***************** UI MODULE DEBUG ******************")
 			print ("   Current Instr: {0:04o}".format(self.regs['IR']))
@@ -733,7 +745,7 @@ class PDP8_ISA(object):
 		# Group 1 Microinstructions: Check if bit 3 is a 0
 		if IR_str[3] == '0':
 			self.GUI_IR_bit_disp_type = 'UI_GRP1'
-			if self.debug_v:
+			if self.debug_ui:
 				print ("                  cla cll cma cml rar ral 0/1 iac")
 				print (" ")
 				print ("Group 1 Microinstructions:")
@@ -747,13 +759,13 @@ class PDP8_ISA(object):
 				# Check if bits 4 and 5 were set
 				if IR_str[4] == '1':
 					self.regs['AC'] = 0
-					if self.debug_v:
+					if self.debug_ui:
 						print (" -- Clear Accumulator")
 						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
 				
 				if IR_str[5] == '1':
 					self.regs['LR'] = 0
-					if self.debug_v:
+					if self.debug_ui:
 						print (" -- Clear Link Register")
 						print ("                NEW LR: {0:1o}".format(self.regs['LR']))
 				
@@ -761,13 +773,13 @@ class PDP8_ISA(object):
 				# Check if bits 6 and 7 were set
 				if IR_str[6] == '1':
 					self.regs['AC'] = (~self.regs['AC']) & self.word_mask
-					if self.debug_v:
+					if self.debug_ui:
 						print (" -- Complement Accumulator")
 						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
 				
 				if IR_str[7] == '1':
 					self.regs['LR'] = not(self.regs['LR'])	# use logical not here since LR is one bit only
-					if self.debug_v:
+					if self.debug_ui:
 						print (" -- Complement Link Register")
 						print ("                NEW LR: {0:1o}".format(self.regs['LR']))
 				
@@ -779,7 +791,7 @@ class PDP8_ISA(object):
 						self.regs['LR'] = not(self.regs['LR'])	# invert LR bit
 					self.regs['AC'] = self.regs['AC'] & self.word_mask 	# mask upper bits of AC to word size
 					
-					if self.debug_v:
+					if self.debug_ui:
 						print (" -- Complement Accumulator")
 						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
 						print ("                NEW LR: {0:1o}".format(self.regs['LR']))
@@ -810,7 +822,7 @@ class PDP8_ISA(object):
 						# with tmp_rotate
 						tmp_rotate = tmp_rotate | (tmp_val >> 1)
 						
-						if self.debug_v:
+						if self.debug_ui:
 							print (" -- Rotate Accumulator and Link Right")
 					
 					# Otherwise bit 10 (the 0/1 bit) is 1 --> rotate 2 positions right
@@ -822,7 +834,7 @@ class PDP8_ISA(object):
 						# with tmp_rotate
 						tmp_rotate = tmp_rotate | (tmp_val >> 2)
 						
-						if self.debug_v:
+						if self.debug_ui:
 							print (" -- Rotate Accumulator and Link Right Twice")
 					
 					# The new value of LR should be the most significant
@@ -833,7 +845,7 @@ class PDP8_ISA(object):
 					self.regs['AC'] = tmp_rotate & word_mask
 					
 					# Debug Print
-					if self.debug_v:
+					if self.debug_ui:
 						print ("                NEW LR: {0:1o}".format(self.regs['LR']))
 						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
 				
@@ -852,7 +864,7 @@ class PDP8_ISA(object):
 						# Then OR tmp_rotate with all the remaining bits of tmp_val
 						# after shifting them left one position.
 						tmp_rotate = tmp_rotate | ((tmp_val & self.word_mask) << 1)
-						if self.debug_v:
+						if self.debug_ui:
 							print (" -- Rotate Accumulator and Link Left")
 					
 					# Otherwise bit 10(the 0/1 bit) is 1 --> rotate 2 positions left
@@ -868,7 +880,7 @@ class PDP8_ISA(object):
 						# the next most significant bit will have been shifted two
 						# bits left.
 						tmp_rotate = tmp_rotate | (((tmp_val << 1) & self.word_mask) << 1)
-						if self.debug_v:
+						if self.debug_ui:
 							print (" -- Rotate Accumulator and Link Left Twice")
 											
 					# Next, the new value of LR should be the most significant
@@ -878,7 +890,7 @@ class PDP8_ISA(object):
 					self.regs['AC'] = tmp_rotate & word_mask
 					
 					# Debug Print
-					if self.debug_v:
+					if self.debug_ui:
 						print ("                NEW LR: {0:1o}".format(self.regs['LR']))
 						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
 
@@ -889,7 +901,7 @@ class PDP8_ISA(object):
 				# OR subgroup: Check if bit 8 is set to 0 
 				if IR_str[8] == '0':
 					self.GUI_IR_bit_disp_type = 'UI_GRP2_OR'
-					if self.debug_v:
+					if self.debug_ui:
 						print ("                  cla sma sza snl 0/1 osr hlt")
 						print (" ")
 						print (" Group 2 Microinstructions:")
@@ -925,7 +937,7 @@ class PDP8_ISA(object):
 						str_skip_check = str_skip_check + 'SNL '
 					
 					# Debug Print: Indicating if any of the OR skip conditions were met
-					if self.debug_v and curr_branch_type == BRANCH_TYPE['CONDITIONAL']:
+					if self.debug_ui and curr_branch_type == BRANCH_TYPE['CONDITIONAL']:
 						if curr_branch_taken:
 							print (" -- OR group condition(s) met: {0}".format(str_OR_success))
 						else:
@@ -936,7 +948,7 @@ class PDP8_ISA(object):
 				else:
 					self.GUI_IR_bit_disp_type = 'UI_GRP2_AND'
 					# debug print header
-					if self.debug_v:
+					if self.debug_ui:
 						print ("                  cla spa sna szl 0/1 osr hlt")
 						print (" ")
 						print (" Group 2 Microinstructions:")
@@ -982,7 +994,7 @@ class PDP8_ISA(object):
 						str_skip_check = str_skip_check + 'SZL '
 					
 					# Debug print
-					if self.debug_v and (curr_branch_type != BRANCH_TYPE['NO_BRANCH']):
+					if self.debug_ui and (curr_branch_type != BRANCH_TYPE['NO_BRANCH']):
 						if curr_branch_taken:
 							print (" -- AND group condition(s) met.")
 						else:
@@ -992,26 +1004,26 @@ class PDP8_ISA(object):
 				# CLA - Clear Accumulator: check if bit 4 is set
 				if IR_str[4] == '1':
 					self.regs['AC'] = 0
-					if self.debug_v:
+					if self.debug_ui:
 						print (" -- CLA - Clear Accumulator")
 						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
 				
 				# OSR - Or Switch Register with Accumulator: check if bit 9 is set
 				if IR_str[9] == '1':
-					if self.debug_v:
+					if self.debug_ui:
 						print (" -- OSR - Or Switch Register with Accumulator")
 						print ("           Previous AC: {0:04o}".format(self.regs['AC']))
 						print ("           Previous SR: {0:04o}".format(self.regs['SR']))
 					
 					self.regs['AC'] = self.regs['AC'] | self.regs['SR']
 					
-					if self.debug_v:
+					if self.debug_ui:
 						print ("                NEW AC: {0:04o}".format(self.regs['AC']))
 				
 				# HLT - HaLT: check if bit 10 is set
 				if IR_str[10] == '1':
 					self.flagHLT = True
-					if self.debug_v:
+					if self.debug_ui:
 						print (" -- HLT - Halt")
 				
 				# If a Group 2 branch instruction was given:
@@ -1216,12 +1228,12 @@ class PDP8_ISA(object):
 # GUI APP CLASS DEFINITIONS
 #----------------------------
 class App:
-	def __init__(self,root,input_filename,debug,debug_v,SR_val):
+	def __init__(self,root,input_filename,debug,debug_ui,SR_val):
 		self.root = root
 		self.root.title("PDP-8 ISA Simulator")
 		self.input_filename = ''
 		
-		self.PDP8 = PDP8_ISA(debug,debug_v,SR_val) # instantiate a PDP8 object
+		self.PDP8 = PDP8_ISA(debug,debug_ui,SR_val) # instantiate a PDP8 object
 			
 		self.view_format_type = 'oct'	# by default, display in octal
 		
@@ -1299,6 +1311,7 @@ class App:
 							text="VIEW STATS", style='Stats.TButton',
 							command=self.view_stats)
 		self.btn_stats.grid(in_=self.menubar,row=0,column=5)
+		self.btn_stats['state']='disabled'	# Disable stats button - function not implemented yet
 		# Exit button
 		s.configure('Exit.TButton', foreground='firebrick4')
 		self.btn_exit = ttk.Button(self.menubar,
@@ -1413,7 +1426,10 @@ class App:
 		
 		# SR frame
 		self.lbl_SR_name = ttk.Label(self.frame_SR, text="SR:", padding=(2,2,2,5)).grid(in_=self.frame_SR,row=0,column=0,sticky='E', rowspan=2)
-		self.lbl_SR_val = ttk.Label(self.frame_SR, textvariable=self.PDP8.GUI_reg_vals['SR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
+		self.lbl_SR_val_frame = ttk.Frame(self.frame_SR)
+		self.lbl_SR_val_frame.grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
+		self.lbl_SR_val = ttk.Label(self.lbl_SR_val_frame, textvariable=self.PDP8.GUI_reg_vals['SR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_SR_val_frame,row=0,column=0)
+		#self.lbl_SR_val = ttk.Label(self.frame_SR, textvariable=self.PDP8.GUI_reg_vals['SR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
 		self.SR_chk_box = []
 		self.SR_bin_val = []
 		SR_bin_start = bin(self.PDP8.regs['SR'])
@@ -1434,9 +1450,14 @@ class App:
 		
 		# Last Executed Instruction Labels
 		self.lbl_prevPC_name = ttk.Label(self.frame_last_instr, text="Previous PC:", padding=(2,4,10,4)).grid(in_=self.frame_last_instr,row=0,column=0, sticky='E')
-		self.lbl_prevPC_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['prevPC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=0,column=1,sticky='W')
+		self.lbl_prevPC_val_frame = ttk.Frame(self.frame_last_instr)
+		self.lbl_prevPC_val_frame.grid(in_=self.frame_last_instr,row=0,column=1,sticky='W')
+		self.lbl_prevPC_val = ttk.Label(self.lbl_prevPC_val_frame, textvariable=self.PDP8.GUI_reg_vals['prevPC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_prevPC_val_frame,row=0,column=0,sticky='W')
+		#self.lbl_prevPC_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['prevPC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=0,column=1,sticky='W')
 		self.lbl_IR_name = ttk.Label(self.frame_last_instr, text="IR:", padding=(2,4,10,4)).grid(in_=self.frame_last_instr,row=1, column=0, sticky='E')
-		self.lbl_IR_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_reg_vals['IR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_last_instr,row=1,column=1,sticky='W')
+		self.lbl_IR_val_frame = ttk.Frame(self.frame_last_instr)
+		self.lbl_IR_val_frame.grid(in_=self.frame_last_instr,row=1,column=1,sticky='W')
+		self.lbl_IR_val = ttk.Label(self.lbl_IR_val_frame, textvariable=self.PDP8.GUI_reg_vals['IR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_IR_val_frame,row=0,column=0,sticky='W')
 		self.lbl_opcode_name = ttk.Label(self.frame_last_instr, text="OPCODE:", 
 			padding=(25,2,10,2)).grid(in_=self.frame_last_instr,row=1, column=2, sticky='E')
 		self.lbl_opcode_val = ttk.Label(self.frame_last_instr, textvariable=self.PDP8.GUI_opcode_str, 
@@ -1484,17 +1505,29 @@ class App:
 		# Last Executed Instruction Labels
 		# row 0
 		self.lbl_PC_name = ttk.Label(self.frame_regs, text="PC:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=0,column=0, sticky='E')
-		self.lbl_PC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['PC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=0,column=1,sticky='W')
+		self.lbl_PC_val_frame = ttk.Frame(self.frame_regs)
+		self.lbl_PC_val_frame.grid(in_=self.frame_regs,row=0,column=1,sticky='W')
+		self.lbl_PC_val = ttk.Label(self.lbl_PC_val_frame, textvariable=self.PDP8.GUI_reg_vals['PC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_PC_val_frame,row=0,column=0,sticky='W')
+		#self.lbl_PC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['PC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=0,column=1,sticky='W')
 		# row 1
 		self.lbl_LR_name = ttk.Label(self.frame_regs, text="LR:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=1, column=0, sticky='E')
 		self.lbl_LR_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_LR_val, padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=1,sticky='W')
 		self.lbl_AC_name = ttk.Label(self.frame_regs, text="AC:", padding=(25,4,10,4)).grid(in_=self.frame_regs,row=1, column=2, sticky='E')
-		self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['AC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
+		self.lbl_AC_val_frame = ttk.Frame(self.frame_regs)
+		self.lbl_AC_val_frame.grid(in_=self.frame_regs,row=1,column=3,sticky='W')
+		self.lbl_AC_val = ttk.Label(self.lbl_AC_val_frame, textvariable=self.PDP8.GUI_reg_vals['AC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_AC_val_frame,row=0,column=0,sticky='W')
+		#self.lbl_AC_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['AC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=1,column=3,sticky='W')
 		# row 2
 		self.lbl_eaddr_name = ttk.Label(self.frame_regs, text="Effective Addr:", padding=(2,4,10,4)).grid(in_=self.frame_regs,row=2, column=0, sticky='E')
-		self.lbl_eaddr_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['eaddr'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=2,column=1,sticky='W')
+		self.lbl_eaddr_val_frame = ttk.Frame(self.frame_regs)
+		self.lbl_eaddr_val_frame.grid(in_=self.frame_regs,row=2,column=1,sticky='W')
+		self.lbl_eaddr_val = ttk.Label(self.lbl_eaddr_val_frame, textvariable=self.PDP8.GUI_reg_vals['eaddr'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_eaddr_val_frame,row=0,column=0,sticky='W')
+		#self.lbl_eaddr_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['eaddr'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=2,column=1,sticky='W')
 		self.lbl_mem_eaddr_name = ttk.Label(self.frame_regs, text="Mem[EAddr]:", padding=(25,4,10,4)).grid(in_=self.frame_regs,row=2, column=2, sticky='E')
-		self.lbl_mem_eaddr_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['mem_eaddr'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=2,column=3,sticky='W')
+		self.lbl_mem_eaddr_val_frame = ttk.Frame(self.frame_regs)
+		self.lbl_mem_eaddr_val_frame.grid(in_=self.frame_regs,row=2,column=3,sticky='W')
+		self.lbl_mem_eaddr_val = ttk.Label(self.lbl_mem_eaddr_val_frame, textvariable=self.PDP8.GUI_reg_vals['mem_eaddr'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_mem_eaddr_val_frame,row=0,column=0,sticky='W')
+		#self.lbl_mem_eaddr_val = ttk.Label(self.frame_regs, textvariable=self.PDP8.GUI_reg_vals['mem_eaddr'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_regs,row=2,column=3,sticky='W')
 		
 		# END LAYOUT FOR GUI
 		#---------------------
@@ -1696,13 +1729,51 @@ class App:
 	# Description: Change the display type of all 
 	#	full size registers and memory values
 	def changed_disp_val_format(self):
-		self.lbl_SR_val
-		self.lbl_IR_val
-		self.lbl_prevPC_val
-		self.lbl_PC_val
-		self.lbl_AC_val
-		self.lbl_eaddr_val
-		self.lbl_mem_eaddr_val
+		# update display type 
+		self.view_format_type = self.strVar_DispType.get()
+		# update textvariables for all full size register labels
+		# first, delete any existing widgets in the indicated frames
+		# SR:
+		for child in self.lbl_SR_val_frame.winfo_children():
+			child.destroy()
+		self.lbl_SR_val = ttk.Label(self.lbl_SR_val_frame, textvariable=self.PDP8.GUI_reg_vals['SR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_SR_val_frame,row=0,column=0)
+		# prevPC:
+		for child in self.lbl_prevPC_val_frame.winfo_children():
+			child.destroy()
+		self.lbl_prevPC_val = ttk.Label(self.lbl_prevPC_val_frame, textvariable=self.PDP8.GUI_reg_vals['prevPC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_prevPC_val_frame,row=0,column=0,sticky='W')
+		# IR: 
+		for child in self.lbl_IR_val_frame.winfo_children():
+			child.destroy()
+		self.lbl_IR_val = ttk.Label(self.lbl_IR_val_frame, textvariable=self.PDP8.GUI_reg_vals['IR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_IR_val_frame,row=0,column=0,sticky='W')
+		# PC: 
+		for child in self.lbl_PC_val_frame.winfo_children():
+			child.destroy()
+		self.lbl_PC_val = ttk.Label(self.lbl_PC_val_frame, textvariable=self.PDP8.GUI_reg_vals['PC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_PC_val_frame,row=0,column=0,sticky='W')
+		# AC:
+		for child in self.lbl_AC_val_frame.winfo_children():
+			child.destroy()
+		self.lbl_AC_val = ttk.Label(self.lbl_AC_val_frame, textvariable=self.PDP8.GUI_reg_vals['AC'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_AC_val_frame,row=0,column=0,sticky='W')
+		# eaddr:
+		for child in self.lbl_eaddr_val_frame.winfo_children():
+			child.destroy()
+		self.lbl_eaddr_val = ttk.Label(self.lbl_eaddr_val_frame, textvariable=self.PDP8.GUI_reg_vals['eaddr'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_eaddr_val_frame,row=0,column=0,sticky='W')
+		# mem[eaddr]:
+		for child in self.lbl_mem_eaddr_val_frame.winfo_children():
+			child.destroy()
+		self.lbl_mem_eaddr_val = ttk.Label(self.lbl_mem_eaddr_val_frame, textvariable=self.PDP8.GUI_reg_vals['mem_eaddr'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.lbl_mem_eaddr_val_frame,row=0,column=0,sticky='W')
+		
+		# Could not get it to work this way:
+		#self.lbl_SR_val.destroy()
+		#self.lbl_SR_val = ttk.Label(self.frame_SR, textvariable=self.PDP8.GUI_reg_vals['SR'][self.view_format_type], padding=(2,2,2,2), relief='solid').grid(in_=self.frame_SR,row=0,column=1, rowspan=2)
+		#self.lbl_SR_val['textvariable']=self.PDP8.GUI_reg_vals['SR'][self.view_format_type]
+		#self.lbl_IR_val.configure(textvariable=self.PDP8.GUI_reg_vals['IR'][self.view_format_type])
+		#self.lbl_prevPC_val.configure(textvariable=self.PDP8.GUI_reg_vals['prevPC'][self.view_format_type])
+		#self.lbl_PC_val.configure(textvariable=self.PDP8.GUI_reg_vals['PC'][self.view_format_type])
+		#self.lbl_AC_val.configure(textvariable=self.PDP8.GUI_reg_vals['AC'][self.view_format_type])
+		#self.lbl_eaddr_val.configure(textvariable=self.PDP8.GUI_reg_vals['eaddr'][self.view_format_type])
+		#self.lbl_mem_eaddr_val.configure(textvariable=self.PDP8.GUI_reg_vals['mem_eaddr'][self.view_format_type])
+		# update all memory labels 
+		self.populateMemTable()
 	
 	#-------------------------------------
 	# Function: changed_SR_val
@@ -1739,20 +1810,20 @@ class App:
 #------------------
 # parse the command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('input_filename', type=str,
+parser.add_argument('--input_filename','-i', nargs='?', const='', default='',
 	help = 'input file name')
 parser.add_argument('--debug','-d', action='store_true',
 	help = 'turn on display of basic debug print statements')
-parser.add_argument('--debug_verbose','-v', action='store_true',
-	help = 'turn on display of verbose debug print statements')
+parser.add_argument('--debug_ui','-u', action='store_true',
+	help = 'turn on display of UI debug print statements')
 parser.add_argument('--SR','--sr', nargs='?', const=0, default=0,
 	help = 'value of the switch register (SR) in octal')
 args = parser.parse_args()
 
 if args.debug == True:
 	print ("Debug Mode On")
-if args.debug_verbose == True:
-	print ("Verbose Debug Mode On")
+if args.debug_ui == True:
+	print ("UI Debug Mode On")
 
 # Note: the SR argument will be stored as a simple string by default.
 if args.SR != 0:
@@ -1762,7 +1833,7 @@ else:
 	
 # GUI Testing
 root = tk.Tk()
-app = App(root,args.input_filename,args.debug,args.debug_verbose,SR)
+app = App(root,args.input_filename,args.debug,args.debug_ui,SR)
 root.mainloop()
 
 
